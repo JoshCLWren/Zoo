@@ -4,8 +4,8 @@ import random
 
 from environment.liquids import Water
 from organisms.dead_things import Corpse
-from organisms.plants import Plant, Tree, Bush, Grass
-from organisms.organisms import Organism, LifeException
+from organisms.organisms import LifeException, Organism
+from organisms.plants import Bush, Grass, Plant, Tree
 
 
 class Animal(Organism):
@@ -82,13 +82,16 @@ class Animal(Organism):
     def drink(self, water, zoo):
         """
         This method is called when the animal drinks.
+        When an animal drinks the thirst attribute is increased by 1.
+        If the water is empty, the thirst attribute is decreased by 1.
+        An animal can die if its thirst attribute is 0.
         """
         if water.size > 1:
             water.size -= 1
-            self.thirst -= 1
+            self.thirst += 1
             self.energy += 1
         else:
-            self.thirst += 1
+            self.thirst -= 1
             self.energy -= 1
             zoo.remove_water(water)
 
@@ -133,8 +136,6 @@ class Animal(Organism):
         self.strength += random.randint(0, 1)
         self.speed += random.randint(0, 1)
         self.size += random.randint(0, 1)
-        self.hunger += random.randint(0, 1)
-        self.thirst += random.randint(0, 1)
         self.energy += random.randint(0, 1)
         self.virility += random.randint(0, 1)
         self.age += 1
@@ -436,7 +437,9 @@ class Animal(Organism):
             )
         ]
 
-        if empty_safe_spots := [spot for spot in nearby_safe_spots if not isinstance(spot, Animal)]:
+        if empty_safe_spots := [
+            spot for spot in nearby_safe_spots if not isinstance(spot, Animal)
+        ]:
             return min(empty_safe_spots, key=lambda x: x.size)
 
         return None
@@ -444,6 +447,9 @@ class Animal(Organism):
     def eat(self, grid, zoo):
         """
         If an Animal is adjacent to a compatible food it will eat it.
+        When an Animal eats the nutrient value of the food is added to the Animal's hunger.
+        An Animal can only eat one food per turn.
+        An Animal could die if its hunger is 0 or below.
         """
         # compatible foods are either plants or animals or both. We can derive that by seeing the
         # base class of the favorite food.
@@ -452,26 +458,38 @@ class Animal(Organism):
             if issubclass(self.favorite_food, Animal)
             else [Plant, Corpse]
         )
-
-        for i, j in itertools.product(range(-1, 2), range(-1, 2)):
-            for compatible_food_class in compatible_food_classes:
-                if isinstance(
-                        grid[self.position[0] + i][self.position[1] + j],
-                        compatible_food_class,
-                ):
-                    self.hunger -= grid[self.position[0] + i][
-                        self.position[1] + j
-                        ].nutrition
-                    grid[self.position[0] + i][self.position[1] + j] = None
-                    self.grow()
-                else:
-                    attack = self.attack(compatible_food_class)
-                    defense = compatible_food_class.defend(opponent=self)
-                    if attack > defense:
-                        compatible_food_class.energy -= attack - defense
-                        if compatible_food_class.energy <= 0:
-                            # the food is dead now, replace it with a dead animal
-                            compatible_food_class.die(zoo)
+        has_eaten = False
+        while not has_eaten:
+            for i, j in itertools.product(range(-1, 2), range(-1, 2)):
+                if has_eaten:
+                    break
+                for compatible_food_class in compatible_food_classes:
+                    if isinstance(
+                            grid[self.position[0] + i][self.position[1] + j],
+                            compatible_food_class,
+                    ):
+                        self.hunger += grid[self.position[0] + i][
+                            self.position[1] + j
+                            ].nutrition
+                        grid[self.position[0] + i][self.position[1] + j] = None
+                        self.grow()
+                        has_eaten = True
+                        break
+                    elif isinstance(
+                            grid[self.position[0] + i][self.position[1] + j],
+                            Animal,
+                    ):
+                        attack = self.attack(compatible_food_class)
+                        defense = compatible_food_class.defend(opponent=self)
+                        if attack > defense:
+                            compatible_food_class.energy -= attack - defense
+                            if compatible_food_class.energy <= 0:
+                                # the food is dead now, replace it with a dead animal
+                                compatible_food_class.die(zoo)
+            # if the animal has not eaten it will grow even more hungry
+            if not has_eaten:
+                self.hunger += 1
+                break
 
 
 class Carnivore(Animal):
@@ -831,5 +849,3 @@ class Rhino(Herbivore):
         """
 
         return "Rhino"
-
-

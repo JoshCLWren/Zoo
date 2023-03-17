@@ -1,5 +1,11 @@
+import itertools
+import random
+
 from environment.base_elements import Dirt
+from environment.liquids import Water
+from organisms.animals import Elephant, Giraffe, Hyena, Lion, Rhino, Zebra
 from organisms.dead_things import Corpse
+from organisms.plants import Bush, Grass, Tree
 
 
 class Zoo:
@@ -86,6 +92,7 @@ class Zoo:
         self.grid[plant.position[0]][plant.position[1]] = dirty_where_plant_was
         self.plants.remove(plant)
         self.full = self.check_full()
+
     def remove_water(self, water):
         """
         This method is called when water is removed from the zoo.
@@ -101,7 +108,6 @@ class Zoo:
         """
         # place the water in the grid
         if not self.full:
-
             self.grid[water.position[0]][water.position[1]] = water.__str__()
             self.water_sources.append(water)
 
@@ -119,3 +125,47 @@ class Zoo:
         # center the grid in the console
         for row in self.grid:
             print("".join([cell.emoji for cell in row]))
+
+
+def create_zoo(height=36, width=60, options=None, animals=None, plants=None):
+    """
+    This function creates the zoo.
+    """
+    # get the system width and height
+
+    if options is None:
+        options = ["animal", "plant", "water"]
+    zoo = Zoo(height=height, width=width)
+
+    # fill the zoo with random animals
+    empty_grid_tiles = zoo.height * zoo.width
+    for row, column in itertools.product(range(zoo.height), range(zoo.width)):
+        selection = random.choice(options)
+        if selection == "animal":
+            if empty_grid_tiles > 0:
+                empty_grid_tiles -= 1
+                animal = random.choice(animals)
+                animal = animal()
+                animal.position = [row, column]
+                zoo.add_animal(animal)
+                zoo.grid[row][column] = animal
+        elif selection == "plant":
+            if empty_grid_tiles > 0:
+                empty_grid_tiles -= 1
+                plant = random.choice(plants)
+                plant = plant()
+                plant.position = [row, column]
+                zoo.add_plant(plant)
+                zoo.grid[row][column] = plant
+        elif selection == "water":
+            if empty_grid_tiles > 0:
+                empty_grid_tiles -= 1
+                water = Water()
+                water.position = [row, column]
+                zoo.add_water(water)
+                zoo.grid[row][column] = water
+        else:
+            dirt = Dirt()
+            dirt.position = [row, column]
+            zoo.grid[row][column] = dirt
+    return zoo

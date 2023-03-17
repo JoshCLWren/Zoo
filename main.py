@@ -7,73 +7,12 @@ The player can be a carnivore, herbivore, or omnivore, and the player can be a p
 it's random what animal the player is.
 """
 
-import itertools
-import random
-
 from environment.base_elements import Dirt
-from environment.buildings import Zoo
+from environment.buildings import create_zoo
 from environment.liquids import Water
-from organisms.animals import Animal, Lion, Zebra, Elephant, Hyena, Giraffe, Rhino
+from organisms.animals import Animal, Elephant, Giraffe, Hyena, Lion, Rhino, Zebra
 from organisms.organisms import LifeException
-from organisms.plants import Tree, Bush, Grass
-
-
-def create_zoo():
-    """
-    This function creates the zoo.
-    """
-    # get the system width and height
-
-    zoo = Zoo(height=36, width=60)
-
-    # fill the zoo with random animals
-    empty_grid_tiles = zoo.height * zoo.width
-    for row, column in itertools.product(range(zoo.height), range(zoo.width)):
-        selection = random.choice(["animal", "plant", "water"])
-        if selection == "animal":
-            if empty_grid_tiles > 0:
-                empty_grid_tiles -= 1
-                animal = random.choice(
-                    [
-                        Lion,
-                        Zebra,
-                        Elephant,
-                        Hyena,
-                        Giraffe,
-                        Rhino,
-                    ]
-                )
-                animal = animal()
-                animal.position = [row, column]
-                zoo.add_animal(animal)
-                zoo.grid[row][column] = animal
-        elif selection == "plant":
-            if empty_grid_tiles > 0:
-                empty_grid_tiles -= 1
-                plant = random.choice(
-                    [
-                        Tree,
-                        Bush,
-                        Grass,
-                    ]
-                )
-                plant = plant()
-                plant.position = [row, column]
-                zoo.add_plant(plant)
-                zoo.grid[row][column] = plant
-        elif selection == "water":
-            if empty_grid_tiles > 0:
-                empty_grid_tiles -= 1
-                water = Water()
-                water.position = [row, column]
-                zoo.add_water(water)
-                zoo.grid[row][column] = water
-        else:
-            dirt = Dirt()
-            dirt.position = [row, column]
-            zoo.grid[row][column] = dirt
-    return zoo
-
+from organisms.plants import Bush, Grass, Tree
 
 def main():
     """
@@ -81,7 +20,12 @@ def main():
     """
 
     # create the zoo
-    zoo = create_zoo()
+    zoo = create_zoo(
+        animals=[
+            Elephant, Giraffe, Hyena, Lion, Rhino, Zebra
+        ],
+        plants=[Bush, Grass, Tree],
+    )
 
     zoo.print_grid()
     # print the zoo
@@ -119,8 +63,6 @@ def main():
                     zoo.grid[thing.position[0]][thing.position[1]] = None
         turn += 1
 
-
-
         # print(f"**********Turn {turn}**********")
         # print(f"Zoo has {len(zoo.animals)} animals")
         #
@@ -137,8 +79,6 @@ def main():
         # redraw the grid
         zoo.print_grid()
         # input("Press enter to continue..")
-
-
 
 
 # run the simulation

@@ -1,1 +1,1 @@
-from . import organisms, animals, dead_things, plants
+from . import animals, dead_things, organisms, plants

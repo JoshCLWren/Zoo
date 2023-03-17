@@ -27,4 +27,4 @@ class Corpse:
         """
 
         self.decompose()
-        return 'decomposed'
+        return "decomposed"

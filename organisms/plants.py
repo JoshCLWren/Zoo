@@ -5,6 +5,7 @@ import random
 from organisms.dead_things import Corpse
 from organisms.organisms import Organism
 
+
 class Plant(Organism):
     """
     This is the class for plants.
@@ -16,7 +17,7 @@ class Plant(Organism):
         """
         self.size = 1
         self.age = 1
-        self.nutrients = 1
+        self.nutrition = 1
         self.favorite_food = Corpse
         self.position = [0, 0]
         self.emoji = "🌱"
@@ -45,8 +46,6 @@ class Plant(Organism):
             zoo.grid[self.position[0]][self.position[1]] = None
         except (TypeError, ValueError) as e:
             print(e)
-
-
 
     def __str__(self):
         """
@@ -88,8 +87,12 @@ class Plant(Organism):
                         grid[self.position[0] + x][self.position[1] + y]
                     )
                 else:
-                    self.unoccupied_tiles.append((self.position[0] + x, self.position[1] + y))
-                    self.nearby_unoccupied_tiles.append((self.position[0] + x, self.position[1] + y))
+                    self.unoccupied_tiles.append(
+                        (self.position[0] + x, self.position[1] + y)
+                    )
+                    self.nearby_unoccupied_tiles.append(
+                        (self.position[0] + x, self.position[1] + y)
+                    )
 
     def reproduce(self, grid, zoo):
         """
