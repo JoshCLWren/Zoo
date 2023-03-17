@@ -1,18 +1,14 @@
+import contextlib
 import itertools
 import random
 
-from models.park import DeadAnimal
+from environment.liquids import Water
+from organisms.dead_things import Corpse
+from organisms.plants import Plant, Tree, Bush, Grass
+from organisms.organisms import Organism, LifeException
 
 
-class LifeException(Exception):
-    def __init__(self, animal):
-        self.animal = animal
-
-    def __str__(self):
-        return f"{self.__str__} has died"
-
-
-class Animal:
+class Animal(Organism):
     """
     This is the base class for all animals.
     """
@@ -21,6 +17,7 @@ class Animal:
         """
         This method is called when the animal is created.
         """
+        self.sleep_counter = 0
         self.strength = 1
         self.speed = 1
         self.size = 1
@@ -38,9 +35,17 @@ class Animal:
         self.animals_nearby = []
         self.nearby_unoccupied_tiles = []
         self.nearby_occupied_tiles = []
-        self.max_age = 100
+        self.max_age = 365
+        self.max_energy = 10
+        self.birth_turn = 1
+        super().__init__()
 
     def check_nearby_tiles(self, grid):
+        self.nearby_unoccupied_tiles = []
+        self.animals_nearby = []
+        self.nearby_occupied_tiles = []
+        self.safe_spot = []
+
         for row, col in itertools.product(range(-1, self.speed), range(-1, self.speed)):
             # check if the grid position exists
             if 0 <= self.position[0] + row < len(grid) and 0 <= self.position[
@@ -51,9 +56,8 @@ class Animal:
                     self.nearby_unoccupied_tiles.append(
                         [self.position[0] + row, self.position[1] + col]
                     )
-
                 elif isinstance(
-                    grid[self.position[0] + row][self.position[1] + col], Animal
+                        grid[self.position[0] + row][self.position[1] + col], Animal
                 ):
                     self.animals_nearby.append(
                         grid[self.position[0] + row][self.position[1] + col]
@@ -63,13 +67,17 @@ class Animal:
                         grid[self.position[0] + row][self.position[1] + col]
                     )
 
-    def check_nearby_animals(self, grid):
-        self.check_nearby_tiles(grid)
-        self.animals_nearby = [
-            animal
-            for animal in self.nearby_occupied_tiles
-            if isinstance(animal, Animal)
-        ]
+        for tile in self.nearby_unoccupied_tiles:
+            is_safe = not any(
+                (0 <= tile[0] + row < len(grid) and 0 <= tile[1] + col < len(grid[0]))
+                and (
+                        grid[tile[0] + row][tile[1] + col] is not None
+                        and isinstance(grid[tile[0] + row][tile[1] + col], Animal)
+                )
+                for row, col in itertools.product(range(-1, 2), range(-1, 2))
+            )
+            if is_safe:
+                self.safe_spot.append(tile)
 
     def drink(self, water, zoo):
         """
@@ -84,38 +92,54 @@ class Animal:
             self.energy -= 1
             zoo.remove_water(water)
 
-    def sleep(self):
+    def sleep(self, grid):
         """
         This method is called when the animal sleeps.
         """
+        self.check_nearby_tiles(grid)
+        quality_of_sleep = sum(1 for _ in self.nearby_unoccupied_tiles)
+        for _ in self.nearby_occupied_tiles:
+            quality_of_sleep -= 1
+        for _ in self.animals_nearby:
+            quality_of_sleep -= 1
+        for _ in self.safe_spot:
+            quality_of_sleep += 1
+        self.sleep_counter = quality_of_sleep // 2
+        self.energy += quality_of_sleep
 
-        self.energy += 1
-
-    def mate(self, partner):
+    def mate(self, partner, grid):
         """
         This method is called when the animal mates.
         """
-        if partner.virility > 0:
+
+        if partner.virility > 0 and self.age > 1 and partner.age > 1:
             self.virility -= 1
             self.energy += 1
-        # return a new animal of the same type
-        return self.__class__()
+            for tile in self.nearby_unoccupied_tiles:
+                row, col = tile
+                if grid[row][col] is None:
+                    baby = self.__class__()
+                    baby.position = [row, col]
+                    grid[row][col] = baby
+                    return baby
+        # return None if no baby was born
+        return None
 
     def grow(self):
         """
         This method is called when the animal grows.
         """
 
-        self.strength += 1
-        self.speed += 1
-        self.size += 1
-        self.hunger += 1
-        self.thirst += 1
-        self.energy += 1
-        self.virility += 1
+        self.strength += random.randint(0, 1)
+        self.speed += random.randint(0, 1)
+        self.size += random.randint(0, 1)
+        self.hunger += random.randint(0, 1)
+        self.thirst += random.randint(0, 1)
+        self.energy += random.randint(0, 1)
+        self.virility += random.randint(0, 1)
         self.age += 1
 
-    def die(self):
+    def die(self, zoo):
         """
         This method is called when the animal dies.
         """
@@ -127,6 +151,16 @@ class Animal:
         self.thirst = 0
         self.energy = 0
         self.virility = 0
+        self.is_alive = False
+        # remove the animal from the grid
+        zoo.grid[self.position[0]][self.position[1]] = None
+        # remove the animal from the zoo
+        with contextlib.suppress(ValueError):
+            zoo.animals.remove(self)
+        # replace the animal with a corpse if the position is not occupied
+        if zoo.grid[self.position[0]][self.position[1]] is None:
+            corpse = Corpse(self)
+            zoo.grid[self.position[0]][self.position[1]] = corpse
 
     def __str__(self):
         """
@@ -154,25 +188,33 @@ class Animal:
             defense_modifier += special_defense
         return random.randint(1, 20) + defense_modifier
 
-    def move(self, direction):
+    def move(self, direction, zoo):
         """
         This method is called when the animal moves. The direction is a list of two numbers.
         """
-        self.position[0] += direction[0]
-        self.position[1] += direction[1]
+        new_row = self.position[0] + direction[0]
+        new_col = self.position[1] + direction[1]
+        if 0 <= new_row < len(zoo.grid) and 0 <= new_col < len(zoo.grid[0]):
+            # new position is within the grid, so update the position
+            zoo.grid[self.position[0]][self.position[1]] = None
+            self.position[0] = new_row
+            self.position[1] = new_col
+            zoo.grid[new_row][new_col] = self
 
     def motivation(self, turn_number, zoo):
         """
-        This determines what the animals most urgent need is i.e. eat, sleep, drink, mate, etc.
+        Determines the animal's most urgent need (drink, eat, sleep, or mate).
         """
-        if (
-            self.age > self.max_age
-            or self.hunger == 0
-            or self.thirst == 0
-            or self.energy == 0
-        ):
-            self._replace_with_dead(zoo)
-            return LifeException(self)
+        if not self.liveness_check():
+            self.die(zoo)
+            raise LifeException(f"{self.__class__.__name__} died of natural causes.")
+
+        if self.sleep_counter > 0:
+            self.sleep_counter -= 1
+            self.motive = "sleep"
+            return
+
+        self.age = turn_number - self.birth_turn
 
         needs = {
             "drink": self.thirst,
@@ -180,13 +222,28 @@ class Animal:
             "sleep": self.energy,
             "mate": self.virility,
         }
-        self.motive = min(needs, key=needs.get)
-        self.age = turn_number
 
-    def _replace_with_dead(self, zoo):
-        self.die()
-        dead_animal = DeadAnimal(self)
-        zoo.add_animal(dead_animal)
+        # Filter out any needs that are already being satisfied (i.e., attribute values of 0)
+        unsatisfied_needs = {k: v for k, v in needs.items() if v > 0}
+
+        # If all needs are being satisfied, choose a need at random
+        if not unsatisfied_needs:
+            self.motive = random.choice(list(needs.keys()))
+        else:
+            # Choose the need with the lowest value
+            self.motive = min(unsatisfied_needs, key=unsatisfied_needs.get)
+
+    def liveness_check(self):
+        """
+        Determines if the animal is still alive.
+        """
+        self.is_alive = (
+                self.age <= self.max_age
+                and self.hunger > 0
+                and self.thirst > 0
+                and self.energy > 0
+        )
+        return self.is_alive
 
     def turn(self, grid, zoo, turn_number):
         """
@@ -197,42 +254,87 @@ class Animal:
         self.motivation(turn_number, zoo)
         self.base_hunger(grid)
         self.base_thirst(grid, zoo)
-        self.base_rest(grid)
-        self.base_reproduce(grid, zoo)
-        self.age = turn_number
+        self.base_rest()
+        if not zoo.full:
+            self.base_reproduce(grid, zoo, turn_number)
+        return self.motive
 
-    def base_reproduce(self, grid, zoo):
-        if self.motive == "mate" and (found_partner := self.look_for_partner(grid)):
-            baby = self.mate(found_partner)
-            # add baby to zoo and move it to an adjacent empty spot
-            empty_spots = [
-                [self.position[0] + i, self.position[1] + j]
-                for i, j in itertools.product(range(-1, 2), range(-1, 2))
-                if isinstance(
-                    grid[self.position[0] + i][self.position[1] + j], type(None)
-                )
-            ]
-            baby.position = random.choice(empty_spots)
-            zoo.append(baby)
+    def base_reproduce(self, grid, zoo, turn_number):
+        if partner := self.check_for_mating_partner(grid):
+            if baby := self.reproduce(partner, zoo, turn_number):
+                zoo.append(baby)
+
         else:
             # move towards random direction
-            self.move([random.randint(-1, 1), random.randint(-1, 1)])
+            self.move([random.randint(-1, 1), random.randint(-1, 1)], zoo)
 
-    def base_rest(self, grid):
+    def check_for_mating_partner(self, grid):
+        # check for adjacent animals of the opposite sex
+        for i, j in itertools.product(range(-1, 2), range(-1, 2)):
+            row = self.position[0] + i
+            col = self.position[1] + j
+            if i == 0 and j == 0:
+                continue
+            if (
+                    0 <= row < len(grid)
+                    and 0 <= col < len(grid[0])
+                    and isinstance(grid[row][col], Animal)
+                    and grid[row][col].__str__() == self.__str__()
+                    and grid[row][col].gender != self.gender
+                    and grid[row][col].motive == "mate"
+            ):
+                return grid[row][col]
+        return None
+
+    def reproduce(self, partner, zoo, turn_number):
+        # check if both animals have enough energy to reproduce
+        zoo.check_full()
+        if zoo.full:
+            return None
+        if (
+                self.energy < self.max_energy * 0.8
+                or partner.energy < partner.max_energy * 0.8
+        ):
+            return None
+        # create baby
+        baby = self.__class__()
+        baby.size = (self.size + partner.size) / 2
+        baby.strength = (self.strength + partner.strength) / 2
+        baby.speed = (self.speed + partner.speed) / 2
+        baby.virility = (self.virility + partner.virility) / 2
+        baby.energy = self.max_energy * 0.4 + partner.max_energy * 0.4
+        baby.hunger = baby.max_hunger * 0.5
+        baby.thirst = baby.max_thirst * 0.5
+        baby.position = self.position
+        baby.birth_turn = turn_number
+        baby.age = 0
+        return baby
+
+    def base_rest(self):
         if self.motive == "sleep":
-            if safe_spot := self.look_for_safe_spot(grid):
-                self.move(safe_spot)
+            if not self.is_at_safe_spot():
+                if safe_spot := self.look_for_safe_spot(self.zoo.grid):
+                    self.move(safe_spot)
+            if self.energy >= self.max_energy // 2:
                 self.sleep()
-            self.sleep()
+
+    def is_at_safe_spot(self):
+        return self.position == self.safe_spot
 
     def base_thirst(self, grid, zoo):
         if self.motive == "drink":
             if found_water := self.look_for_water(grid):
-                self.move(found_water.position)
+                self.move(found_water.position, zoo)
                 self.drink(found_water, zoo)
             else:
                 # move towards random direction
-                self.move([random.randint(-1, 1), random.randint(-1, 1)])
+                direction = [random.randint(-1, 1), random.randint(-1, 1)]
+                new_pos = [
+                    self.position[0] + direction[0],
+                    self.position[1] + direction[1],
+                ]
+                if 0 <= new_pos[0] < len(grid) and 0 <= new_pos[1] < len(grid[0]):
+                    self.move(direction, zoo)
 
     def base_hunger(self, grid, func=None):
         if func is None:
@@ -245,23 +347,22 @@ class Animal:
                 # move towards random direction
                 self.move([random.randint(-1, 1), random.randint(-1, 1)])
 
-    def look_for_food(self, grid):
+    def look_for_food(self, grid, limit=None):
         """
-        This method is called when the animal looks for food in the reach of the animals speed.
+        This method is called when the animal looks for food in the reach of the animal's speed.
         """
-        if nearby_food := [
-            grid[self.position[0] + i][self.position[1] + j]
-            for i, j in itertools.product(
+        food = []
+        for i, j in itertools.product(
                 range(-self.speed, self.speed + 1),
                 range(-self.speed, self.speed + 1),
-            )
+        ):
+            if limit is not None and len(food) >= limit:
+                break
             if isinstance(
-                grid[self.position[0] + i][self.position[1] + j],
-                self.favorite_food,
-            )
-        ]:
-            return min(nearby_food, key=lambda x: x.size)
-        return None
+                    grid[self.position[0] + i][self.position[1] + j], self.favorite_food
+            ):
+                food.append(grid[self.position[0] + i][self.position[1] + j])
+        return min(food, key=lambda x: x.size) if food else None
 
     def look_for_partner(self, grid):
         """
@@ -289,23 +390,19 @@ class Animal:
         """
         This method is called when the animal looks for water in the reach of the animals speed.
         """
-        # account for edges of grid
-        if self.position[0] - self.speed < 0:
-            self.position[0] = self.speed
-        if self.position[0] + self.speed > len(grid) - 1:
-            self.position[0] = len(grid) - self.speed - 1
-        if self.position[1] - self.speed < 0:
-            self.position[1] = self.speed
-        if self.position[1] + self.speed > len(grid[0]) - 1:
-            self.position[1] = len(grid[0]) - self.speed - 1
+        min_index = self.speed
+        max_index_i = len(grid) - self.speed
+        max_index_j = len(grid[0]) - self.speed
+
+        i_min = max(self.position[0] - self.speed, 0)
+        i_max = min(self.position[0] + self.speed + 1, max_index_i)
+        j_min = max(self.position[1] - self.speed, 0)
+        j_max = min(self.position[1] + self.speed + 1, max_index_j)
 
         if nearby_water := [
-            grid[self.position[0] + i][self.position[1] + j]
-            for i, j in itertools.product(
-                range(-self.speed, self.speed + 1),
-                range(-self.speed, self.speed + 1),
-            )
-            if isinstance(grid[self.position[0] + i][self.position[1] + j], Water)
+            grid[i][j]
+            for i, j in itertools.product(range(i_min, i_max), range(j_min, j_max))
+            if isinstance(grid[i][j], Water)
         ]:
             return min(nearby_water, key=lambda x: x.size)
         return None
@@ -315,6 +412,9 @@ class Animal:
         This method is called when the animal looks for a safe spot to mate or sleep.
         A safe spot is a spot where no other animal of the same species is present.
         """
+        if self.safe_spot:
+            return self.safe_spot
+
         # account for the edges of the grid
         if self.position[0] - self.speed < 0:
             self.position[0] = self.speed
@@ -325,7 +425,7 @@ class Animal:
         if self.position[1] + self.speed > len(grid[0]) - 1:
             self.position[1] = len(grid[0]) - 1 - self.speed
 
-        if nearby_safe_spot := [
+        nearby_safe_spots = [
             grid[self.position[0] + i][self.position[1] + j]
             for i, j in itertools.product(
                 range(-self.speed, self.speed + 1),
@@ -334,8 +434,10 @@ class Animal:
             if isinstance(
                 grid[self.position[0] + i][self.position[1] + j], self.__class__
             )
-        ]:
-            return min(nearby_safe_spot, key=lambda x: x.size)
+        ]
+
+        if empty_safe_spots := [spot for spot in nearby_safe_spots if not isinstance(spot, Animal)]:
+            return min(empty_safe_spots, key=lambda x: x.size)
 
         return None
 
@@ -345,27 +447,31 @@ class Animal:
         """
         # compatible foods are either plants or animals or both. We can derive that by seeing the
         # base class of the favorite food.
-        compatible_food_class = Plant
-        if isinstance(self.favorite_food, Animal):
-            compatible_food_class = DeadAnimal
+        compatible_food_classes = (
+            [self.favorite_food]
+            if issubclass(self.favorite_food, Animal)
+            else [Plant, Corpse]
+        )
 
         for i, j in itertools.product(range(-1, 2), range(-1, 2)):
-            if isinstance(
-                grid[self.position[0] + i][self.position[1] + j], compatible_food_class
-            ):
-                self.hunger -= grid[self.position[0] + i][
-                    self.position[1] + j
-                ].nutrition
-                grid[self.position[0] + i][self.position[1] + j] = None
-                self.grow()
-            else:
-                attack = self.attack(compatible_food_class)
-                defense = compatible_food_class.defend()
-                if attack > defense:
-                    compatible_food_class.energy -= attack - defense
-                    if compatible_food_class.energy <= 0:
-                        # the food is dead now, replace it with a dead animal
-                        zoo.remove_animal(compatible_food_class)
+            for compatible_food_class in compatible_food_classes:
+                if isinstance(
+                        grid[self.position[0] + i][self.position[1] + j],
+                        compatible_food_class,
+                ):
+                    self.hunger -= grid[self.position[0] + i][
+                        self.position[1] + j
+                        ].nutrition
+                    grid[self.position[0] + i][self.position[1] + j] = None
+                    self.grow()
+                else:
+                    attack = self.attack(compatible_food_class)
+                    defense = compatible_food_class.defend(opponent=self)
+                    if attack > defense:
+                        compatible_food_class.energy -= attack - defense
+                        if compatible_food_class.energy <= 0:
+                            # the food is dead now, replace it with a dead animal
+                            compatible_food_class.die(zoo)
 
 
 class Carnivore(Animal):
@@ -417,7 +523,7 @@ class Omnivore(Animal):
         """
         This method is called when the omnivore is created.
         """
-        self.favorite_food = Plant
+        self.favorite_food = random.choice([Plant, Animal])
         super().__init__()
 
     def __str__(self):
@@ -452,20 +558,20 @@ class Predator(Carnivore):
         This method is called when the animal takes a turn.
         """
         self.motivation(turn_number, zoo)
-        self.predator_hunger(grid)
+        self.predator_hunger(grid, zoo)
         self.base_thirst(grid, zoo)
-        self.base_rest(grid)
-        self.base_reproduce(grid, zoo)
-        self.age = turn_number
+        self.base_rest()
+        zoo.check_full()
+        if not zoo.full:
+            self.base_reproduce(grid, zoo, turn_number)
+        self.age = turn_number - self.birth_turn
+        return self.motive
 
-    def predator_hunger(self, grid):
+    def predator_hunger(self, grid, zoo):
         if self.motive == "hunger":
             if found_food := self.hunt(grid):
                 self.move(found_food)
-                self.eat(found_food)
-            else:
-                # move towards random direction
-                self.move([random.randint(-1, 1), random.randint(-1, 1)])
+                self.eat(found_food, zoo)
 
     def hunt(self, grid):
         """
@@ -473,12 +579,10 @@ class Predator(Carnivore):
         The predator will check the surrounding tiles for prey and move towards it.
         The predator can move its speed in any direction and will attack the prey if it is in range.
         """
-        self.check_nearby_animals(grid)
+        self.check_nearby_tiles(grid)
 
         for animal in self.animals_nearby:
-            if isinstance(animal, self.favorite_food) or not isinstance(
-                animal, self.__class__
-            ):
+            if not isinstance(animal, Predator):
                 # the predator will change its position to an unoccupied tile adjacent to the prey
                 self.check_nearby_tiles(grid)
                 self.position = random.choice(self.nearby_unoccupied_tiles)
@@ -507,7 +611,7 @@ class Prey(Herbivore):
         """
         If the prey is near a predator, it will run away.
         """
-        self.check_nearby_animals(grid)
+        self.check_nearby_tiles(grid)
 
         try:
             nearest_predator = min(
@@ -518,7 +622,8 @@ class Prey(Herbivore):
         if nearest_predator and isinstance(nearest_predator, Predator):
             # the prey will change its position to an unoccupied tile adjacent to the predator
             self.check_nearby_tiles(grid)
-            self.position = random.choice(self.nearby_unoccupied_tiles)
+            with contextlib.suppress(IndexError):
+                self.position = random.choice(self.nearby_unoccupied_tiles)
 
     def turn(self, grid, zoo, turn_number):
         """
@@ -528,9 +633,12 @@ class Prey(Herbivore):
         self.motivation(turn_number, zoo)
         self.base_hunger(grid)
         self.base_thirst(grid, zoo)
-        self.base_rest(grid)
-        self.base_reproduce(grid, zoo)
-        self.age = turn_number
+        self.base_rest()
+        zoo.check_full()
+        if not zoo.full:
+            self.base_reproduce(grid, zoo, turn_number)
+        self.age = turn_number - self.birth_turn
+        return self.motive
 
 
 class Scavenger(Animal):
@@ -542,7 +650,7 @@ class Scavenger(Animal):
         """
         This method is called when the scavenger is created.
         """
-        self.favorite_food = DeadAnimal
+        self.favorite_food = Corpse
         super().__init__()
 
     def __str__(self):
@@ -561,7 +669,7 @@ class Scavenger(Animal):
             self.nearby_occupied_tiles,
             key=lambda x: abs(x.position[0] - self.position[0]),
         )
-        if isinstance(nearest_dead_animal, DeadAnimal):
+        if isinstance(nearest_dead_animal, Corpse):
             # the scavenger will change its position to an unoccupied tile adjacent to the dead animal
             self.check_nearby_tiles(grid)
             self.position = random.choice(self.nearby_unoccupied_tiles)
@@ -573,135 +681,12 @@ class Scavenger(Animal):
         self.motivation(turn_number, zoo)
         self.base_hunger(grid, func=self.scavenge)
         self.base_thirst(grid, zoo)
-        self.base_rest(grid)
-        self.base_reproduce(grid, zoo)
-        self.age = turn_number
-
-
-class Plant:
-    """
-    This is the class for plants.
-    """
-
-    def __init__(self):
-        """
-        This method is called when the plant is created.
-        """
-        self.size = 1
-        self.age = 1
-        self.nutrients = 1
-        self.favorite_food = DeadAnimal
-        self.position = [random.randint(0, 9), random.randint(0, 9)]
-        self.emoji = "🌱"
-        self.max_size = 500
-
-    def grow(self):
-        """
-        This method is called when the plant grows.
-        """
-
-        self.size += 1
-        self.age += 1
-
-    def die(self):
-        """
-        This method is called when the plant dies.
-        """
-
-        self.size = 0
-
-    def __str__(self):
-        """
-        This method is called when the plant is printed.
-        """
-
-        return "Plant"
-
-    def turn(self, grid, turn_number, zoo):
-        """
-        On a plants turn it will grow and then check if it can reproduce.
-        """
-        self.grow()
-        self.reproduce(grid, zoo)
-        self.age = turn_number
-
-    def reproduce(self, grid, zoo):
-        """
-        A plant will reproduce if it is near an empty tile or another plant or water.
-        """
-        self.check_nearby_tiles(grid)
-        if self.unoccupied_tiles:
-            baby_plant = self.__class__()
-            baby_plant.position = random.choice(empty_tiles)
-            zoo.add_plant(baby_plant)
-            return
-        # check if the nearby tiles are occupied by a plant
-        if self.nearby_occupied_tiles and all(
-            isinstance(plant, Plant) for plant in self.nearby_occupied_tiles
-        ):
-            baby_plant = self.__class__()
-            baby_plant.position = random.choice(empty_tiles)
-            zoo.add_plant(baby)
-
-
-class Tree(Plant):
-    """
-    This is the class for trees.
-    """
-
-    def __init__(self):
-        """
-        This method is called when the tree is created.
-        """
-        self.emoji = "🌳"
-        super().__init__()
-
-    def __str__(self):
-        """
-        This method is called when the tree is printed.
-        """
-
-        return "Tree"
-
-
-class Bush(Plant):
-    """
-    This is the class for bushes.
-    """
-
-    def __init__(self):
-        """
-        This method is called when the bush is created.
-        """
-        self.emoji = "🌿"
-        super().__init__()
-
-    def __str__(self):
-        """
-        This method is called when the bush is printed.
-        """
-
-        return "Bush"
-
-
-class Grass(Plant):
-    """
-    This is the class for grass.
-    """
-
-    def __init__(self):
-        """
-        This method is called when the grass is created.
-        """
-        self.emoji = "🌾"
-        super().__init__()
-
-    def __str__(self):
-        """
-        This method is called when the grass is printed.
-        """
-
-        return "Grass"
+        self.base_rest()
+        zoo.check_full()
+        if not zoo.full:
+            self.base_reproduce(grid, zoo, turn_number)
+        self.age = turn_number - self.birth_turn
+        return self.motive
 
 
 class Lion(Predator):
@@ -717,7 +702,7 @@ class Lion(Predator):
         self.size = 5
         self.favorite_food = Zebra
         self.emoji = "🦁"
-        self.max_age = 10
+        self.max_age = 10 * 365
         super().__init__()
 
     def __str__(self):
@@ -741,7 +726,7 @@ class Zebra(Prey):
         self.speed = 5
         self.size = 3
         self.emoji = "🦓"
-        self.max_age = 10
+        self.max_age = 10 * 365
         super().__init__()
 
     def __str__(self):
@@ -765,7 +750,7 @@ class Elephant(Herbivore):
         self.size = 10
         self.favorite_food = Tree
         self.emoji = "🐘"
-        self.max_age = 30
+        self.max_age = 30 * 365
         super().__init__()
 
     def __str__(self):
@@ -787,9 +772,9 @@ class Hyena(Scavenger):
         """
         self.strength = 3
         self.size = 3
-        self.favorite_food = DeadAnimal
+        self.favorite_food = Corpse
         self.emoji = "🦡"
-        self.max_age = 10
+        self.max_age = 10 * 365
         super().__init__()
 
     def __str__(self):
@@ -813,7 +798,7 @@ class Giraffe(Prey):
         self.speed = 3
         self.size = 5
         self.emoji = "🦒"
-        self.max_age = 10
+        self.max_age = 10 * 365
         super().__init__()
 
     def __str__(self):
@@ -837,7 +822,7 @@ class Rhino(Herbivore):
         self.size = 7
         self.favorite_food = Bush
         self.emoji = "🦏"
-        self.max_age = 10
+        self.max_age = 10 * 365
         super().__init__()
 
     def __str__(self):
@@ -848,15 +833,3 @@ class Rhino(Herbivore):
         return "Rhino"
 
 
-class Water:
-    """
-    This is the class for water on the map.
-    """
-
-    def __init__(self):
-        """
-        This method is called when the water is created.
-        """
-        self.position = [0, 0]
-        self.size = random.randint(1, 1000)
-        self.emoji = "🌊"

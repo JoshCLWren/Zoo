@@ -1,4 +1,5 @@
-import numpy as np
+from environment.base_elements import Dirt
+from organisms.dead_things import Corpse
 
 
 class Zoo:
@@ -18,6 +19,21 @@ class Zoo:
         # grid is a matrix of the same size as the zoo
         # it contains the string representation of the animal at that position
         self.grid = [[None for _ in range(self.width)] for _ in range(self.height)]
+        self.full = self.check_full()
+
+    def check_full(self):
+        """
+        This method checks if the zoo is full.
+        """
+        # check if there are any empty positions in the grid
+        max_capacity = self.height * self.width
+        if len(self.plants) > max_capacity:
+            return True
+        for row in self.grid:
+            for cell in row:
+                if cell:
+                    max_capacity -= 1
+        self.full = max_capacity == 0
 
     def add_animal(self, animal):
         """
@@ -25,8 +41,10 @@ class Zoo:
         """
         # place the animal in the grid
         try:
-            self.grid[animal.position[0]][animal.position[1]] = animal
-            self.animals.append(animal)
+            if not self.full:
+                self.grid[animal.position[0]][animal.position[1]] = animal
+                self.animals.append(animal)
+
         except IndexError:
             print("Animal position is out of bounds")
 
@@ -38,9 +56,10 @@ class Zoo:
         self.grid[animal.position[0]][animal.position[1]] = None
         self.animals.remove(animal)
         # replace the animal with a DeadAnimal
-        dead_animal = DeadAnimal(animal)
+        dead_animal = Corpse(animal)
         self.add_animal(dead_animal)
         dead_animal.decompose()
+        self.full = self.check_full()
 
     def __str__(self):
         """
@@ -54,17 +73,19 @@ class Zoo:
         This method is called when a plant is added to the zoo.
         """
         # place the plant in the grid
-        self.grid[plant.position[0]][plant.position[1]] = plant.__str__()
-        self.plants.append(plant)
+        if not self.full:
+            self.grid[plant.position[0]][plant.position[1]] = plant
+            self.plants.append(plant)
 
     def remove_plant(self, plant):
         """
         This method is called when a plant is removed from the zoo.
         """
         # remove the plant from the grid
-        self.grid[plant.position[0]][plant.position[1]] = None
+        dirty_where_plant_was = Dirt(plant.position)
+        self.grid[plant.position[0]][plant.position[1]] = dirty_where_plant_was
         self.plants.remove(plant)
-
+        self.full = self.check_full()
     def remove_water(self, water):
         """
         This method is called when water is removed from the zoo.
@@ -72,14 +93,17 @@ class Zoo:
         # remove the water from the grid
         self.grid[water.position[0]][water.position[1]] = None
         self.water_sources.remove(water)
+        self.full = self.check_full()
 
     def add_water(self, water):
         """
         This method is called when water is added to the zoo.
         """
         # place the water in the grid
-        self.grid[water.position[0]][water.position[1]] = water.__str__()
-        self.water_sources.append(water)
+        if not self.full:
+
+            self.grid[water.position[0]][water.position[1]] = water.__str__()
+            self.water_sources.append(water)
 
     def print_grid(self):
         """
@@ -90,63 +114,8 @@ class Zoo:
             for j in range(self.width):
                 if self.grid[i][j] is None:
                     self.grid[i][j] = Dirt()
-        # print the emoji representation of the grid
-
-        print(
-            [
-                [f" {str(self.grid[i][j].emoji)} " for j in range(self.width)]
-                for i in range(self.height)
-            ]
-        )
-
-
-class DeadAnimal:
-    """
-    This is the class for dead animals.
-    """
-
-    def __init__(self, former_animal=None):
-        """
-        This method is called when the dead animal is created.
-        """
-        self.former_animal = former_animal.__str__()
-        self.nutrients = former_animal.size + former_animal.virility
-        self.size = former_animal.size
-        self.position = former_animal.position
-        self.emoji = "💀"
-
-    def decompose(self):
-        """
-        This method is called when the dead animal decomposes.
-        """
-
-        self.size -= 1
-        self.nutrients -= 1
-
-    def turn(self, *args, **kwargs):
-        """
-        This method is called when the dead animal turns.
-        """
-
-        self.decompose()
-
-
-class Dirt:
-    """
-    This is the class for dirt.
-    """
-
-    def __init__(self):
-        """
-        This method is called when dirt is created.
-        """
-
-        self.nutrients = 0
-        self.emoji = "🌱"
-
-    def __str__(self):
-        """
-        This method is called when dirt is printed.
-        """
-
-        return "Dirt"
+        # print the emoji representation of the grid to the console, with each row on a new line
+        # print the grid to the console in the form of a matrix
+        # center the grid in the console
+        for row in self.grid:
+            print("".join([cell.emoji for cell in row]))
