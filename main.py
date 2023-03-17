@@ -1205,9 +1205,8 @@ def create_zoo():
     This function creates the zoo.
     """
     # get the sytem width and height
-    import shutil
-    width, height = shutil.get_terminal_size()
-    zoo = Zoo(height=width, width=height)
+
+    zoo = Zoo(height=36, width=60)
 
     # fill the zoo with random animals
     empty_grid_tiles = zoo.height * zoo.width
@@ -1319,7 +1318,7 @@ def main():
         # clear the screen
         # redraw the grid
         zoo.print_grid()
-        input("Press enter to continue..")
+        # input("Press enter to continue..")
 
 
 
