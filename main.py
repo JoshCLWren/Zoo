@@ -7,6 +7,7 @@ The player can be a carnivore, herbivore, or omnivore, and the player can be a p
 it's random what animal the player is.
 """
 import logging
+import sqlite3
 from environment.base_elements import Dirt
 from environment.buildings import create_zoo
 from environment.liquids import Water
@@ -14,16 +15,20 @@ from organisms.animals import Animal, Elephant, Giraffe, Hyena, Lion, Rhino, Zeb
 from organisms.organisms import LifeException
 from organisms.plants import Bush, Grass, Tree
 
+logging.disable(logging.CRITICAL)
+
 
 def main():
     """
-    This function is the main function.
+    This function is the main function of the game.
     """
 
     # create the zoo
+    conn = sqlite3.connect("zoo.db")
     zoo = create_zoo(
         animals=[Elephant, Giraffe, Hyena, Lion, Rhino, Zebra],
         plants=[Bush, Grass, Tree],
+        conn=conn,
     )
 
     zoo.refresh_grid()
@@ -53,7 +58,9 @@ def main():
                     if not thing.is_alive:
                         dead_things.append(thing)
                         continue
-                    action = thing.turn(zoo.grid, turn_number=turn, zoo=zoo)
+                    thing.refresh_home_id(home_id=zoo.reprocess_tiles())
+                    action = thing.turn(turn_number=turn)
+                    zoo = thing.zoo
                     if action == "died":
                         dead_things.append(thing)
                 except LifeException:
@@ -76,10 +83,11 @@ def main():
         # input("Press enter to continue..")
         # clear the screen
         # redraw the grid
-        logging.error(f"Turn {turn}")
+        print(f"Turn {turn}")
         zoo.refresh_grid()
-        input("Press enter to continue..")
+        # input("Press enter to continue..")
 
 
 # run the simulation
-main()
+if __name__ == "__main__":
+    main()

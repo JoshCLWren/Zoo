@@ -1,5 +1,6 @@
 import contextlib
 import itertools
+import logging
 import random
 
 from organisms.dead_things import Corpse
@@ -11,11 +12,11 @@ class Plant(Organism):
     This is the class for plants.
     """
 
-    def __init__(self):
+    def __init__(self, home_id):
         """
         This method is called when the plant is created.
         """
-        super().__init__()
+        super().__init__(home_id)
         self.size = 1
         self.age = 1
         self.nutrition = 1
@@ -36,15 +37,15 @@ class Plant(Organism):
         if random.randint(1, 100) == 1:
             self.size += 1
 
-    def die(self, zoo):
+    def die(self):
         """
         This method is called when the plant dies.
         """
         try:
             self.is_alive = False
-            zoo.plants.remove(self)
+            self.home_id.plants.remove(self)
 
-            zoo.grid[self.position[0]][self.position[1]] = None
+            self.home_id.grid[self.position[0]][self.position[1]] = None
         except (TypeError, ValueError) as e:
             logging.error(e)
 
@@ -55,26 +56,26 @@ class Plant(Organism):
 
         return "Plant"
 
-    def turn(self, grid, turn_number, zoo):
+    def turn(self, turn_number):
         """
         On a plants turn it will grow and then check if it can reproduce.
         """
         # check if the plant is dead
         action = None
         if self.max_age <= self.age:
-            self.die(zoo)
+            self.die()
             return "died"
         self.grow()
         action = "grew"
         # check if the zoo is full
-        zoo.check_full()
-        if not zoo.full:
-            self.reproduce(grid, zoo)
+        self.home_id.check_full()
+        if not self.home_id.full:
+            self.reproduce()
             action = "reproduced"
         self.age = turn_number - self.birth_turn
         return action
 
-    def check_nearby_tiles(self, grid):
+    def check_nearby_tiles(self):
         """
         This method is called when the plant checks the nearby tiles.
         """
@@ -85,7 +86,7 @@ class Plant(Organism):
             with contextlib.suppress(IndexError):
                 if grid[self.position[0] + x][self.position[1] + y] is not None:
                     self.nearby_occupied_tiles.append(
-                        grid[self.position[0] + x][self.position[1] + y]
+                        self.home_id.grid[self.position[0] + x][self.position[1] + y]
                     )
                 else:
                     self.unoccupied_tiles.append(
@@ -95,18 +96,18 @@ class Plant(Organism):
                         (self.position[0] + x, self.position[1] + y)
                     )
 
-    def reproduce(self, grid, zoo):
+    def reproduce(self):
         """
         A plant will reproduce if it is near an empty tile or another plant or water.
         """
-        zoo.check_full()
-        if zoo.full:
+        self.home_id.check_full()
+        if self.home_id.full:
             return
-        self.check_nearby_tiles(grid)
+        self.check_nearby_tiles()
         if any(grid[x][y] is None for x, y in self.nearby_unoccupied_tiles):
             baby_plant = self.__class__()
             baby_plant.position = random.choice(self.unoccupied_tiles)
-            zoo.add_plant(baby_plant)
+            self.home_id.add_plant(baby_plant)
             self.unoccupied_tiles.remove(baby_plant.position)
             self.nearby_unoccupied_tiles.remove(baby_plant.position)
 
@@ -116,11 +117,11 @@ class Tree(Plant):
     This is the class for trees.
     """
 
-    def __init__(self):
+    def __init__(self, home_id):
         """
         This method is called when the tree is created.
         """
-        super().__init__()
+        super().__init__(home_id)
         self.emoji = "🌳"
 
     def __str__(self):
@@ -136,11 +137,11 @@ class Bush(Plant):
     This is the class for bushes.
     """
 
-    def __init__(self):
+    def __init__(self, home_id):
         """
         This method is called when the bush is created.
         """
-        super().__init__()
+        super().__init__(home_id)
         self.emoji = "🌿"
 
     def __str__(self):
@@ -156,11 +157,11 @@ class Grass(Plant):
     This is the class for grass.
     """
 
-    def __init__(self):
+    def __init__(self, home_id):
         """
         This method is called when the grass is created.
         """
-        super().__init__()
+        super().__init__(home_id)
         self.emoji = "🌾"
 
     def __str__(self):
