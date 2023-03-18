@@ -15,6 +15,7 @@ class Plant(Organism):
         """
         This method is called when the plant is created.
         """
+        super().__init__()
         self.size = 1
         self.age = 1
         self.nutrition = 1
@@ -26,14 +27,14 @@ class Plant(Organism):
         self.unoccupied_tiles = []
         self.nearby_unoccupied_tiles = []
         self.birth_turn = 1
-        super().__init__()
 
     def grow(self):
         """
         This method is called when the plant grows.
         """
-
-        self.size += 1
+        # roll a d100 if it is 1 then the plant grows by 1
+        if random.randint(1, 100) == 1:
+            self.size += 1
 
     def die(self, zoo):
         """
@@ -45,7 +46,7 @@ class Plant(Organism):
 
             zoo.grid[self.position[0]][self.position[1]] = None
         except (TypeError, ValueError) as e:
-            print(e)
+            logging.error(e)
 
     def __str__(self):
         """
@@ -119,8 +120,8 @@ class Tree(Plant):
         """
         This method is called when the tree is created.
         """
-        self.emoji = "🌳"
         super().__init__()
+        self.emoji = "🌳"
 
     def __str__(self):
         """
@@ -139,8 +140,8 @@ class Bush(Plant):
         """
         This method is called when the bush is created.
         """
-        self.emoji = "🌿"
         super().__init__()
+        self.emoji = "🌿"
 
     def __str__(self):
         """
@@ -159,8 +160,8 @@ class Grass(Plant):
         """
         This method is called when the grass is created.
         """
-        self.emoji = "🌾"
         super().__init__()
+        self.emoji = "🌾"
 
     def __str__(self):
         """

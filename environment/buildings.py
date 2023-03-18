@@ -1,11 +1,14 @@
+import contextlib
 import itertools
 import random
 
 from environment.base_elements import Dirt
 from environment.liquids import Water
-from organisms.animals import Elephant, Giraffe, Hyena, Lion, Rhino, Zebra
+from organisms.animals import Elephant, Giraffe, Hyena, Lion, Rhino, Zebra, Animal
 from organisms.dead_things import Corpse
 from organisms.plants import Bush, Grass, Tree
+import logging
+
 
 
 class Zoo:
@@ -25,7 +28,8 @@ class Zoo:
         # grid is a matrix of the same size as the zoo
         # it contains the string representation of the animal at that position
         self.grid = [[None for _ in range(self.width)] for _ in range(self.height)]
-        self.full = self.check_full()
+        self.full = False
+        self.tiles_to_refresh = []
 
     def check_full(self):
         """
@@ -52,7 +56,7 @@ class Zoo:
                 self.animals.append(animal)
 
         except IndexError:
-            print("Animal position is out of bounds")
+            logging.error("Animal position is out of bounds")
 
     def remove_animal(self, animal):
         """
@@ -60,7 +64,8 @@ class Zoo:
         """
         # remove the animal from the grid
         self.grid[animal.position[0]][animal.position[1]] = None
-        self.animals.remove(animal)
+        with contextlib.suppress(ValueError):
+            self.animals.remove(animal)
         # replace the animal with a DeadAnimal
         dead_animal = Corpse(animal)
         self.add_animal(dead_animal)
@@ -90,7 +95,8 @@ class Zoo:
         # remove the plant from the grid
         dirty_where_plant_was = Dirt(plant.position)
         self.grid[plant.position[0]][plant.position[1]] = dirty_where_plant_was
-        self.plants.remove(plant)
+        with contextlib.suppress(ValueError):
+            self.plants.remove(plant)
         self.full = self.check_full()
 
     def remove_water(self, water):
@@ -99,7 +105,8 @@ class Zoo:
         """
         # remove the water from the grid
         self.grid[water.position[0]][water.position[1]] = None
-        self.water_sources.remove(water)
+        with contextlib.suppress(ValueError):
+            self.water_sources.remove(water)
         self.full = self.check_full()
 
     def add_water(self, water):
@@ -111,23 +118,86 @@ class Zoo:
             self.grid[water.position[0]][water.position[1]] = water.__str__()
             self.water_sources.append(water)
 
-    def print_grid(self):
+    def refresh_grid(self, visualise=True):
         """
         This method is called when the grid is printed.
         """
-        # check for any None values in the grid and replace them with dirt
+
+        # check self.tiles_to_refresh and replace the tiles with what they were before an animal moved
+        # to that tile
+        tiles_to_refresh = []
+        #remove and None values from self.tiles_to_refresh
+        self.tiles_to_refresh = [tile for tile in self.tiles_to_refresh if tile is not None]
+        for tile in self.tiles_to_refresh:
+            # check if the tile is occupied by an animal
+            if not issubclass(
+                self.grid[tile.position[0]][tile.position[1]].__class__, Animal
+            ):
+                # if it is, replace the tile with the animal
+                self.grid[tile.position[0]][tile.position[1]] = tile
+            else:
+                # if it isn't, add it to the list of tiles to refresh
+                tiles_to_refresh.append(tile)
+
+        self.tiles_to_refresh = tiles_to_refresh
+
+        # fill any vacant tiles with dirt
         for i in range(self.height):
             for j in range(self.width):
                 if self.grid[i][j] is None:
-                    self.grid[i][j] = Dirt()
+                    # check if the tile is next to water and if so make it grass
+                    north_neighbour = self.grid[i - 1][j] if i > 0 else None
+                    south_neighbour = (
+                        self.grid[i + 1][j] if i < self.height - 1 else None
+                    )
+                    east_neighbour = self.grid[i][j + 1] if j < self.width - 1 else None
+                    west_neighbour = self.grid[i][j - 1] if j > 0 else None
+                    north_east_neighbour = (
+                        self.grid[i - 1][j + 1]
+                        if i > 0 and j < self.width - 1
+                        else None
+                    )
+                    north_west_neighbour = (
+                        self.grid[i - 1][j - 1] if i > 0 and j > 0 else None
+                    )
+                    south_east_neighbour = (
+                        self.grid[i + 1][j + 1]
+                        if i < self.height - 1 and j < self.width - 1
+                        else None
+                    )
+                    south_west_neighbour = (
+                        self.grid[i + 1][j - 1]
+                        if i < self.height - 1 and j > 0
+                        else None
+                    )
+                    neighbors = {
+                        "north": north_neighbour,
+                        "south": south_neighbour,
+                        "east": east_neighbour,
+                        "west": west_neighbour,
+                        "north_east": north_east_neighbour,
+                        "north_west": north_west_neighbour,
+                        "south_east": south_east_neighbour,
+                        "south_west": south_west_neighbour,
+                    }
+                    for neighbor in neighbors.values():
+                        if neighbor and neighbor.__class__ == Water or neighbor.__class__ == Grass:
+                            self.grid[i][j] = Grass()
+                            self.grid[i][j].position = (i, j)
+                            break
+                    else:
+                        self.grid[i][j] = Dirt()
+                        self.grid[i][j].position = (i, j)
+
         # print the emoji representation of the grid to the console, with each row on a new line
         # print the grid to the console in the form of a matrix
         # center the grid in the console
-        for row in self.grid:
-            print("".join([cell.emoji for cell in row]))
+        if visualise:
+            for row in self.grid:
+                print("".join([cell.emoji for cell in row]))
 
 
-def create_zoo(height=36, width=60, options=None, animals=None, plants=None):
+def create_zoo(height=35, width=65, options=None, animals=None, plants=None):
     """
     This function creates the zoo.
     """

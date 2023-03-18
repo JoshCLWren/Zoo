@@ -11,5 +11,5 @@ class Water:
         This method is called when the water is created.
         """
         self.position = [0, 0]
-        self.size = random.randint(1, 1000)
+        self.size = 1
         self.emoji = "🌊"

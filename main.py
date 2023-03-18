@@ -6,13 +6,14 @@ The player can also interact with other animals, and the player can also interac
 The player can be a carnivore, herbivore, or omnivore, and the player can be a predator or prey since
 it's random what animal the player is.
 """
-
+import logging
 from environment.base_elements import Dirt
 from environment.buildings import create_zoo
 from environment.liquids import Water
 from organisms.animals import Animal, Elephant, Giraffe, Hyena, Lion, Rhino, Zebra
 from organisms.organisms import LifeException
 from organisms.plants import Bush, Grass, Tree
+
 
 def main():
     """
@@ -21,13 +22,11 @@ def main():
 
     # create the zoo
     zoo = create_zoo(
-        animals=[
-            Elephant, Giraffe, Hyena, Lion, Rhino, Zebra
-        ],
+        animals=[Elephant, Giraffe, Hyena, Lion, Rhino, Zebra],
         plants=[Bush, Grass, Tree],
     )
 
-    zoo.print_grid()
+    zoo.refresh_grid()
     # print the zoo
     turn = 1
     living_animals = 1
@@ -63,22 +62,23 @@ def main():
                     zoo.grid[thing.position[0]][thing.position[1]] = None
         turn += 1
 
-        # print(f"**********Turn {turn}**********")
-        # print(f"Zoo has {len(zoo.animals)} animals")
+        # logging.error(f"**********Turn {turn}**********")
+        # logging.error(f"Zoo has {len(zoo.animals)} animals")
         #
-        # print(f"Zoo has {len(zoo.plants)} plants")
+        # logging.error(f"Zoo has {len(zoo.plants)} plants")
         # # if len(zoo.plants) > 100:
         # #     import pdb; pdb.set_trace()
         # #     pass
-        # print(f"Zoo has {len(zoo.water_sources)} water sources")
+        # logging.error(f"Zoo has {len(zoo.water_sources)} water sources")
 
         zoo.check_full()
-        # print(f"Zoo is {'full' if zoo.full else 'not full'}")
+        # logging.error(f"Zoo is {'full' if zoo.full else 'not full'}")
         # input("Press enter to continue..")
         # clear the screen
         # redraw the grid
-        zoo.print_grid()
-        # input("Press enter to continue..")
+        logging.error(f"Turn {turn}")
+        zoo.refresh_grid()
+        input("Press enter to continue..")
 
 
 # run the simulation

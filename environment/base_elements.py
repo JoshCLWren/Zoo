@@ -7,10 +7,10 @@ class Dirt:
         """
         This method is called when dirt is created.
         """
-
+        self.size = 0
         self.nutrients = 0
         self.position = [0, 0]
-        self.emoji = "🌱"
+        self.emoji = "🪨 "
 
     def __str__(self):
         """
