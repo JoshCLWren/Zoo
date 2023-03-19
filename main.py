@@ -10,7 +10,7 @@ import logging
 import sqlite3
 
 from environment.base_elements import Dirt
-from environment.buildings import create_zoo
+from environment.buildings import create_zoo, Zoo
 from environment.liquids import Water
 from organisms.animals import (Animal, Elephant, Giraffe, Hyena, Lion, Rhino,
                                Zebra)
@@ -59,9 +59,9 @@ def main():
                     if not thing.is_alive:
                         dead_things.append(thing)
                         continue
-                    thing.refresh_home_id(home_id=zoo.reprocess_tiles())
+                    zoo = Zoo.load_instance(thing.home_id)
+                    zoo.reprocess_tiles()
                     action = thing.turn(turn_number=turn)
-                    zoo = thing.zoo
                     if action == "died":
                         dead_things.append(thing)
                 except LifeException:
@@ -87,6 +87,7 @@ def main():
         # redraw the grid
         print(f"Turn {turn}")
         zoo.refresh_grid()
+        zoo = Zoo.load_instance(zoo.id)
         # input("Press enter to continue..")
 
 

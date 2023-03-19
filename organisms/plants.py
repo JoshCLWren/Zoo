@@ -3,6 +3,7 @@ import itertools
 import logging
 import random
 
+import environment.buildings
 from organisms.dead_things import Corpse
 from organisms.organisms import Organism
 
@@ -45,7 +46,7 @@ class Plant(Organism):
             self.is_alive = False
             self.home_id.plants.remove(self)
 
-            self.home_id.grid[self.position[0]][self.position[1]] = None
+            self.home_id.home.grid[self.position[0]][self.position[1]] = None
         except (TypeError, ValueError) as e:
             logging.error(e)
 
@@ -61,6 +62,7 @@ class Plant(Organism):
         On a plants turn it will grow and then check if it can reproduce.
         """
         # check if the plant is dead
+        home = environment.buildings.Zoo.load_instance(self.home_id)
         action = None
         if self.max_age <= self.age:
             self.die()
@@ -68,8 +70,8 @@ class Plant(Organism):
         self.grow()
         action = "grew"
         # check if the zoo is full
-        self.home_id.check_full()
-        if not self.home_id.full:
+        home.check_full()
+        if not home.full:
             self.reproduce()
             action = "reproduced"
         self.age = turn_number - self.birth_turn
@@ -82,11 +84,12 @@ class Plant(Organism):
         self.nearby_occupied_tiles = []
         self.unoccupied_tiles = []
         self.nearby_unoccupied_tiles = []
+        home = environment.buildings.Zoo.load_instance(self.home_id)
         for x, y in itertools.product(range(-1, 2), range(-1, 2)):
             with contextlib.suppress(IndexError):
-                if grid[self.position[0] + x][self.position[1] + y] is not None:
+                if home.grid[self.position[0] + x][self.position[1] + y] is not None:
                     self.nearby_occupied_tiles.append(
-                        self.home_id.grid[self.position[0] + x][self.position[1] + y]
+                        self.home_id.home.grid[self.position[0] + x][self.position[1] + y]
                     )
                 else:
                     self.unoccupied_tiles.append(
@@ -100,14 +103,16 @@ class Plant(Organism):
         """
         A plant will reproduce if it is near an empty tile or another plant or water.
         """
-        self.home_id.check_full()
-        if self.home_id.full:
+        home = environment.buildings.Zoo.load_instance(self.home_id)
+
+        home.check_full()
+        if home.full:
             return
         self.check_nearby_tiles()
-        if any(grid[x][y] is None for x, y in self.nearby_unoccupied_tiles):
-            baby_plant = self.__class__()
+        if any(home.grid[x][y] is None for x, y in self.nearby_unoccupied_tiles):
+            baby_plant = self.__class__(home_id=self.home_id)
             baby_plant.position = random.choice(self.unoccupied_tiles)
-            self.home_id.add_plant(baby_plant)
+            home.add_plant(baby_plant)
             self.unoccupied_tiles.remove(baby_plant.position)
             self.nearby_unoccupied_tiles.remove(baby_plant.position)
 

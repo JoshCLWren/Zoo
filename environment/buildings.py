@@ -72,10 +72,13 @@ class Zoo:
         self.db = database.DatabaseConnection()
 
     @classmethod
-    def load_instance(cls, zoo_id):
+    def load_instance(cls, zoo_id: str):
         """
         This method loads a Zoo instance from the database.
         """
+        if not isinstance(zoo_id, str) and isinstance(zoo_id, Zoo):
+            zoo_id = zoo_id.id
+
         if cls._instance is not None:
             return cls._instance
         db = database.DatabaseConnection()
@@ -84,6 +87,7 @@ class Zoo:
         df = pd.read_sql_query(
             "SELECT * FROM zoos WHERE id = ?", conn, params=(zoo_id,)
         )
+
         if df.empty:
             raise ZooError("No zoo found with that ID.")
         # create a dictionary from the DataFrame
@@ -116,11 +120,10 @@ class Zoo:
         """
         # check if there are any empty positions in the grid
         max_capacity = self.height * self.width
-        if len(self.plants) > max_capacity:
-            return True
         for row in self.grid:
             for cell in row:
-                if cell:
+                # check if the cell is empty or Dirt
+                if cell is None or isinstance(cell, Dirt):
                     max_capacity -= 1
         self.full = max_capacity == 0
 
