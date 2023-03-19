@@ -113,8 +113,9 @@ class Animal(Organism):
         else:
             self.thirst -= 1
             self.energy -= 1
-            home.remove_water(water)
+            home = environment.buildings.Zoo.load_instance(self.home_id)
             home.grid[water.position[0]][water.position[1]] = None
+            home.reprocess_tiles()
 
     def sleep(self):
         """

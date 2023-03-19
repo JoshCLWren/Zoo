@@ -93,14 +93,12 @@ class Zoo:
         # create a dictionary from the DataFrame
         zoo_dict = df.to_dict(orient="records")[0]
         # deserialize the string representations of the lists
-        grid = make_blank_grid(zoo_dict["height"], zoo_dict["width"])
-        with contextlib.suppress(sqlite3.OperationalError):  # tiles might not exist yet
-            if tiles := Tile.load(conn, zoo_id):
-                for tile in tiles:
-                    grid[tile.position[0]][tile.position[1]] = tile
-        zoo_dict["grid"] = grid
+        grid = cls.get_all_zoos_things(zoo_id=zoo_id, height=zoo_dict["height"], width=zoo_dict["width"])
         zoo = cls(height=zoo_dict["height"], width=zoo_dict["width"])
+        zoo.grid = grid
         for key, value in zoo_dict.items():
+            if key == "grid":
+                continue
             setattr(zoo, key, value)
         return zoo
 
@@ -155,40 +153,7 @@ class Zoo:
                 value = []
 
             setattr(self, key, value)
-        zoo_tiles_schema = {
-            "id": "TEXT PRIMARY KEY",
-            "home_id": "TEXT REFERENCES zoos(id)",
-            "pickled_instance": "BLOB",
-            "created_dt": "TEXT",
-            "updated_dt": "TEXT",
-        }
-        tiles = {
-            "animals": database.Entity.load_all(
-                "animals", self.id, schema=zoo_tiles_schema
-            ),
-            "plants": database.Entity.load_all(
-                "plants", self.id, schema=zoo_tiles_schema
-            ),
-            "water_sources": database.Entity.load_all(
-                "water", self.id, schema=zoo_tiles_schema
-            ),
-            "dirt": database.Entity.load_all("dirt", self.id, schema=zoo_tiles_schema),
-        }
-
-        grid = make_blank_grid(self.height, self.width)
-        if not tiles:
-            # if there are no tiles yet then there is no need to refresh the grid
-            raise ZooError("No tiles found in the database.")
-        for value in tiles.values():
-            for entity in value:
-                if entity.get("pickled_instance") is None:
-                    continue
-                value = entity.get("pickled_instance")
-                file_data = io.BytesIO(value)
-                tile = pickle.load(file_data)
-                grid[tile.position[0]][tile.position[1]] = tile
-
-
+        grid = self.get_all_zoos_things(zoo_id=self.id, height=self.height, width=self.width)
 
         self.grid = grid
         self.reprocess_tiles()
@@ -204,6 +169,45 @@ class Zoo:
         if visualise:
             for row in self.grid:
                 print("".join([cell.emoji for cell in row]))
+
+    @staticmethod
+    def get_all_zoos_things(zoo_id: str, height: int, width: int):
+        """
+        Load all the things in the zoo from the database.
+        :return: a list of all the things in the zoo
+        """
+        zoo_tiles_schema = {
+            "id": "TEXT PRIMARY KEY",
+            "home_id": "TEXT REFERENCES zoos(id)",
+            "pickled_instance": "BLOB",
+            "created_dt": "TEXT",
+            "updated_dt": "TEXT",
+        }
+        tiles = {
+            "animals": database.Entity.load_all(
+                "animals", zoo_id, schema=zoo_tiles_schema
+            ),
+            "plants": database.Entity.load_all(
+                "plants", zoo_id, schema=zoo_tiles_schema
+            ),
+            "water_sources": database.Entity.load_all(
+                "water", zoo_id, schema=zoo_tiles_schema
+            ),
+            "dirt": database.Entity.load_all("dirt", zoo_id, schema=zoo_tiles_schema),
+        }
+        grid = make_blank_grid(height, width)
+        if not tiles:
+            # if there are no tiles yet then there is no need to refresh the grid
+            raise ZooError("No tiles found in the database.")
+        for value in tiles.values():
+            for entity in value:
+                if entity.get("pickled_instance") is None:
+                    continue
+                value = entity.get("pickled_instance")
+                file_data = io.BytesIO(value)
+                tile = pickle.load(file_data)
+                grid[tile.position[0]][tile.position[1]] = tile
+        return grid
 
     def weather(self):
         self.is_raining = random.choice([True, False])

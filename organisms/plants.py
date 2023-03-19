@@ -89,7 +89,7 @@ class Plant(Organism):
             with contextlib.suppress(IndexError):
                 if home.grid[self.position[0] + x][self.position[1] + y] is not None:
                     self.nearby_occupied_tiles.append(
-                        self.home_id.home.grid[self.position[0] + x][self.position[1] + y]
+                        home.grid[self.position[0] + x][self.position[1] + y]
                     )
                 else:
                     self.unoccupied_tiles.append(
