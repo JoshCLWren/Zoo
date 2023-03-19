@@ -144,9 +144,15 @@ class Table:
         columns = []
         types = []
         if columns_and_types:
-            for column, _type in columns_and_types.items():
-                columns.append(column)
-                types.append(_type)
+            try:
+                for column, _type in columns_and_types.items():
+                    columns.append(column)
+                    types.append(_type)
+            except AttributeError:
+                import pdb
+
+                pdb.set_trace()
+                pass
         if table_name is None:
             raise ValueError("The table name cannot be None.")
         if foreign_keys is None:
@@ -290,7 +296,7 @@ class Entity(Table):
             return False
 
     @classmethod
-    def load_all(cls, table_name, foreign_key):
+    def load_all(cls, table_name, foreign_key, schema):
         """
         This method loads all the entities from the database related to the foreign key.
         :param table_name:
@@ -304,7 +310,12 @@ class Entity(Table):
             db = DatabaseConnection()
             db.execute(sql, [foreign_key])
             rows = db.fetchall()
-            return [cls(*row) for row in rows]
+            if schema:
+                # return the rows as a list of dictionaries
+                return [dict(zip(schema, row)) for row in rows]
+            else:
+                # return the rows as a cls objects
+                return [cls(*row) for row in rows]
         except DatabaseError as e:
             print(e)
             return False

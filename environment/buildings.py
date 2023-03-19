@@ -9,6 +9,7 @@ import uuid
 from dataclasses import dataclass, field
 
 import arrow
+import io
 import pandas as pd
 
 import database
@@ -151,11 +152,24 @@ class Zoo:
                 value = []
 
             setattr(self, key, value)
+        zoo_tiles_schema = {
+            "id": "TEXT PRIMARY KEY",
+            "home_id": "TEXT REFERENCES zoos(id)",
+            "pickled_instance": "BLOB",
+            "created_dt": "TEXT",
+            "updated_dt": "TEXT",
+        }
         tiles = {
-            "animals": database.Entity.load_all("animals", self.id),
-            "plants": database.Entity.load_all("plants", self.id),
-            "water_sources": database.Entity.load_all("water", self.id),
-            "dirt": database.Entity.load_all("dirt", self.id),
+            "animals": database.Entity.load_all(
+                "animals", self.id, schema=zoo_tiles_schema
+            ),
+            "plants": database.Entity.load_all(
+                "plants", self.id, schema=zoo_tiles_schema
+            ),
+            "water_sources": database.Entity.load_all(
+                "water", self.id, schema=zoo_tiles_schema
+            ),
+            "dirt": database.Entity.load_all("dirt", self.id, schema=zoo_tiles_schema),
         }
 
         grid = make_blank_grid(self.height, self.width)
@@ -164,9 +178,14 @@ class Zoo:
             raise ZooError("No tiles found in the database.")
         for value in tiles.values():
             for entity in value:
-                # unpickle the tile
-                instance = pickle.load(open(entity["pickled_instance"], "rb"))
-                grid[instance.position[0]][instance.position[1]] = instance
+                if entity.get("pickled_instance") is None:
+                    continue
+                value = entity.get("pickled_instance")
+                file_data = io.BytesIO(value)
+                tile = pickle.load(file_data)
+                grid[tile.position[0]][tile.position[1]] = tile
+
+
 
         self.grid = grid
         self.reprocess_tiles()
