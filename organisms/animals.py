@@ -328,6 +328,7 @@ class Animal(Organism):
         self.base_hunger()
         self.base_thirst()
         self.base_rest()
+        home = environment.buildings.Zoo.load_instance(self.home_id)
         if not home.full:
             self.base_reproduce(turn_number)
         return self.motive
@@ -339,10 +340,11 @@ class Animal(Organism):
 
         else:
             # move towards random direction
-            self.move([random.randint(-1, 1), random.randint(-1, 1)], home)
+            self.move([random.randint(-1, 1), random.randint(-1, 1)])
 
     def check_for_mating_partner(self):
         # check for adjacent animals of the opposite sex
+        home = environment.buildings.Zoo.load_instance(self.home_id)
         for i, j in itertools.product(range(-1, 2), range(-1, 2)):
             row = self.position[0] + i
             col = self.position[1] + j
@@ -686,6 +688,7 @@ class Predator(Carnivore):
         self.predator_hunger()
         self.base_thirst()
         self.base_rest()
+        home = environment.buildings.Zoo.load_instance(self.home_id)
         home.check_full()
         if not home.full:
             self.base_reproduce(turn_number)
@@ -756,12 +759,13 @@ class Prey(Herbivore):
         """
         self.run_away()
         self.motivation(turn_number)
-        self.base_hunger(home.grid, home)
-        self.base_thirst(home.grid, home)
+        self.base_hunger()
+        self.base_thirst()
         self.base_rest()
+        home = environment.buildings.Zoo.load_instance(self.home_id)
         home.check_full()
         if not home.full:
-            self.base_reproduce(home.grid, home, turn_number)
+            self.base_reproduce(turn_number)
         self.age = turn_number - self.birth_turn
         return self.motive
 
@@ -806,6 +810,7 @@ class Scavenger(Animal):
         """
         This method is called when the animal takes a turn.
         """
+        home = environment.buildings.Zoo.load_instance(self.home_id)
         self.motivation(turn_number)
         self.base_hunger(func=self.scavenge)
         self.base_thirst()

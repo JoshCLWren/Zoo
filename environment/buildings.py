@@ -374,7 +374,7 @@ class Zoo:
         zoo_entity.save()
 
 
-def create_zoo(height=35, width=65, options=None, animals=None, plants=None):
+def create_zoo(height=5, width=5, options=None, animals=None, plants=None):
     """
     This function creates the zoo.
     """
