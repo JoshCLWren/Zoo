@@ -8,10 +8,12 @@ it's random what animal the player is.
 """
 import logging
 import sqlite3
+
 from environment.base_elements import Dirt
 from environment.buildings import create_zoo
 from environment.liquids import Water
-from organisms.animals import Animal, Elephant, Giraffe, Hyena, Lion, Rhino, Zebra
+from organisms.animals import (Animal, Elephant, Giraffe, Hyena, Lion, Rhino,
+                               Zebra)
 from organisms.organisms import LifeException
 from organisms.plants import Bush, Grass, Tree
 
@@ -24,16 +26,15 @@ def main():
     """
 
     # create the zoo
-    conn = sqlite3.connect("zoo.db")
     zoo = create_zoo(
         animals=[Elephant, Giraffe, Hyena, Lion, Rhino, Zebra],
         plants=[Bush, Grass, Tree],
-        conn=conn,
     )
 
     zoo.refresh_grid()
     # print the zoo
     turn = 1
+    zoo.elapsed_turns = 0
     living_animals = 1
     while living_animals:
         # render the zoo
@@ -68,6 +69,7 @@ def main():
                     # remove the animal from the grid
                     zoo.grid[thing.position[0]][thing.position[1]] = None
         turn += 1
+        zoo.elapsed_turns += 1
 
         # logging.error(f"**********Turn {turn}**********")
         # logging.error(f"Zoo has {len(zoo.animals)} animals")

@@ -2,18 +2,40 @@ import contextlib
 import datetime
 import itertools
 import logging
+import pickle
 import random
+import sqlite3
 import uuid
 from dataclasses import dataclass, field
 
 import arrow
 import pandas as pd
 
+import database
+import environment.grid
 from environment.base_elements import Dirt
+from environment.grid import Tile, create_tiles_table
 from environment.liquids import Water
-from organisms.animals import Animal, Elephant, Giraffe, Hyena, Lion, Rhino, Zebra
+from organisms.animals import (Animal, Elephant, Giraffe, Hyena, Lion, Rhino,
+                               Zebra)
 from organisms.dead_things import Corpse
 from organisms.plants import Bush, Grass, Tree
+
+
+def make_blank_grid(height, width):
+    """
+    This method creates a blank grid for the zoo.
+    :return:
+    """
+    return [[None for _ in range(height)] for _ in range(width)]
+
+
+class ZooError(Exception):
+    """
+    This is the exception for the zoo.
+    """
+
+    pass
 
 
 @dataclass
@@ -22,20 +44,21 @@ class Zoo:
     This is the class for the zoo.
     """
 
+    _instance = None
+
     def __init__(self, height: int, width: int):
         """
         This method is called when the zoo is created.
         """
+        now = arrow.now().isoformat()
         self.full: bool = False
         self.height: int = 0
         self.width: int = 0
         self.id: str = str(uuid.uuid4())
         self.csv_path: str = f"zoo_{self.id}.csv"
-        self.created_dt: str = arrow.now().isoformat()
-        self.updated_dt: str = arrow.now().isoformat()
+        self.created_dt: str = now
+        self.updated_dt: str = now
         self.is_raining: bool = False
-        self.animals: list = []
-        self.plants: list = []
         self.water_sources: list = []
         self.tiles_to_refresh: list = []
         self.grid: list = []
@@ -45,119 +68,46 @@ class Zoo:
         # it contains the string representation of the animal at that position
         self.grid = [[None for _ in range(self.width)] for _ in range(self.height)]
         self.elapsed_turns: int = 0
-
-    def create_table(self, conn):
-        """
-        This method creates the database table for the zoo.
-        """
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS zoos (
-                            id TEXT PRIMARY KEY,
-                            height INTEGER,
-                            width INTEGER,
-                            full INTEGER,
-                            created_dt TEXT,
-                            updated_dt TEXT,
-                            is_raining BOOLEAN,
-                            animals TEXT,
-                            plants TEXT,
-                            water_sources TEXT,
-                            tiles_to_refresh TEXT
-                            grid TEXT
-                            )"""
-            )
-            conn.commit()
-        except Exception as e:
-            print(e)
-            conn.rollback()
-
-    def save(self, conn):
-        """
-        This method saves the zoo to the sqlite database..
-        It will upsert the zoo if it already exists.
-        :param conn: the connection to the database
-        """
-        print(f"Saving the zoo to the database... zoo_id = {self.id}")
-
-        self.updated_dt = arrow.now().isoformat()
-        # create a string representation of the grid
-        grid_str = "\n".join(
-            [",".join([str(cell) for cell in row]) for row in self.grid]
-        )
-        # create a dictionary from the attributes of the class instance
-        zoo_dict = self.__dict__
-        grid_copy = zoo_dict["grid"]
-        # add the string representation of the grid to the dictionary
-        zoo_dict["grid_str"] = grid_str
-        # remove the nested list representation of the grid from the dictionary
-        del zoo_dict["grid"]
-        self.grid = grid_copy
-        # create the table if it does not exist
-        self.create_table(conn)
-        # insert the zoo into the database
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute(
-                """INSERT OR REPLACE INTO 
-                    zoos
-                    (   
-                        id, 
-                        height, 
-                        width, 
-                        full, 
-                        created_dt, 
-                        updated_dt, 
-                        is_raining, 
-                        animals, 
-                        plants, 
-                        water_sources, 
-                        tiles_to_refresh, 
-                        grid
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    self.id,
-                    self.height,
-                    self.width,
-                    int(self.full),
-                    self.created_dt,
-                    self.updated_dt,
-                    int(self.is_raining),
-                    str(self.animals),
-                    str(self.plants),
-                    str(self.water_sources),
-                    str(self.tiles_to_refresh),
-                    grid_str,
-                ),
-            )
-            conn.commit()
-        except Exception as e:
-            print(e)
-            conn.rollback()
+        self.db = database.DatabaseConnection()
 
     @classmethod
-    def load(cls, conn):
+    def load_instance(cls, zoo_id):
         """
         This method loads a Zoo instance from the database.
         """
-        # load the DataFrame from the CSV file
+        if cls._instance is not None:
+            return cls._instance
+        db = database.DatabaseConnection()
+        conn = db.conn
         print("Loading the zoo from the database...")
-        df = pd.read_sql_query("SELECT * FROM zoos WHERE id = ?", conn, params=(id,))
+        df = pd.read_sql_query(
+            "SELECT * FROM zoos WHERE id = ?", conn, params=(zoo_id,)
+        )
+        if df.empty:
+            raise ZooError("No zoo found with that ID.")
         # create a dictionary from the DataFrame
         zoo_dict = df.to_dict(orient="records")[0]
         # deserialize the string representations of the lists
-        for key, value in zoo_dict:
-            if key in ["animals", "plants", "water_sources", "tiles_to_refresh"]:
-                zoo_dict[key] = value.split(",")
-            if key == "grid":
-                zoo_dict[key] = value.split("\n")
-                zoo_dict[key] = [
-                    [cell for cell in row.split(",")] for row in zoo_dict[key]
-                ]
-        return cls(**zoo_dict)
+        grid = make_blank_grid(zoo_dict["height"], zoo_dict["width"])
+        with contextlib.suppress(sqlite3.OperationalError):  # tiles might not exist yet
+            if tiles := Tile.load(conn, zoo_id):
+                for tile in tiles:
+                    grid[tile.position[0]][tile.position[1]] = tile
+        zoo_dict["grid"] = grid
+        zoo = cls(height=zoo_dict["height"], width=zoo_dict["width"])
+        for key, value in zoo_dict.items():
+            setattr(zoo, key, value)
+        return zoo
+
+    def refresh_from_db(self):
+        """
+        This method queries the database for the latest version of the zoo.
+        And updates the attributes of the instance.
+        :param conn:
+        :return:
+        """
+        self._instance = None
+        self._instance = self.load_instance(zoo_id=self.id)
 
     def check_full(self):
         """
@@ -173,33 +123,6 @@ class Zoo:
                     max_capacity -= 1
         self.full = max_capacity == 0
 
-    def add_animal(self, animal):
-        """
-        This method is called when an animal is added to the zoo.
-        """
-        # place the animal in the grid
-        try:
-            if not self.full:
-                self.grid[animal.position[0]][animal.position[1]] = animal
-                self.animals.append(animal)
-
-        except IndexError:
-            logging.error("Animal position is out of bounds")
-
-    def remove_animal(self, animal):
-        """
-        This method is called when an animal is removed from the zoo.
-        """
-        # remove the animal from the grid
-        self.grid[animal.position[0]][animal.position[1]] = None
-        with contextlib.suppress(ValueError):
-            self.animals.remove(animal)
-        # replace the animal with a DeadAnimal
-        dead_animal = Corpse(animal)
-        self.add_animal(dead_animal)
-        dead_animal.decompose()
-        self.full = self.check_full()
-
     def __str__(self):
         """
         This method is called when the zoo is printed.
@@ -207,60 +130,51 @@ class Zoo:
 
         return "Zoo"
 
-    def add_plant(self, plant):
-        """
-        This method is called when a plant is added to the zoo.
-        """
-        # place the plant in the grid
-        if not self.full:
-            self.grid[plant.position[0]][plant.position[1]] = plant
-            self.plants.append(plant)
-
-    def remove_plant(self, plant):
-        """
-        This method is called when a plant is removed from the zoo.
-        """
-        # remove the plant from the grid
-        dirty_where_plant_was = Dirt(plant.position)
-        self.grid[plant.position[0]][plant.position[1]] = dirty_where_plant_was
-        with contextlib.suppress(ValueError):
-            self.plants.remove(plant)
-        self.full = self.check_full()
-
-    def remove_water(self, water):
-        """
-        This method is called when water is removed from the zoo.
-        """
-        # remove the water from the grid
-        self.grid[water.position[0]][water.position[1]] = None
-        with contextlib.suppress(ValueError):
-            self.water_sources.remove(water)
-        self.full = self.check_full()
-
-    def add_water(self, water):
-        """
-        This method is called when water is added to the zoo.
-        """
-        # place the water in the grid
-        if not self.full:
-            self.grid[water.position[0]][water.position[1]] = water.__str__()
-            self.water_sources.append(water)
-
     def refresh_grid(self, visualise=True):
         """
         This method is called when the grid is updated.
         :param visualise: whether to print the grid to the console
+        :param conn: the database connection
         """
-        self.update_from_csv()
+        self.refresh_from_db()
         # check self.tiles_to_refresh and replace the tiles with what they were before an animal moved
         # to that tile
+        for key, value in self.__dict__.items():
+            if key in [
+                "animals",
+                "plants",
+                "water_sources",
+                "tiles_to_refresh",
+            ] and isinstance(value, str):
+                value = value.split(",")
+            if value == "[]":
+                value = []
 
+            setattr(self, key, value)
+        tiles = {
+            "animals": database.Entity.load_all("animals", self.id),
+            "plants": database.Entity.load_all("plants", self.id),
+            "water_sources": database.Entity.load_all("water", self.id),
+            "dirt": database.Entity.load_all("dirt", self.id),
+        }
+
+        grid = make_blank_grid(self.height, self.width)
+        if not tiles:
+            # if there are no tiles yet then there is no need to refresh the grid
+            raise ZooError("No tiles found in the database.")
+        for value in tiles.values():
+            for entity in value:
+                # unpickle the tile
+                instance = pickle.load(open(entity["pickled_instance"], "rb"))
+                grid[instance.position[0]][instance.position[1]] = instance
+
+        self.grid = grid
         self.reprocess_tiles()
         intensity, is_raining = self.weather()
         # fill any vacant tiles with dirt
         self.fill_blanks(intensity, is_raining)
-        # update the save_as_csv of the zoo
-        self.save_as_csv()
+        self._instance = None
+        self._instance = self.load_instance(zoo_id=self.id)
 
         # print the emoji representation of the grid to the console, with each row on a new line
         # print the grid to the console in the form of a matrix
@@ -272,7 +186,7 @@ class Zoo:
     def weather(self):
         self.is_raining = random.choice([True, False])
         intensity = None
-        if is_raining:
+        if self.is_raining:
             intensities = {
                 "torrential": 0.01,
                 "heavy": 0.05,
@@ -283,7 +197,7 @@ class Zoo:
                 list(intensities.keys()), weights=list(intensities.values())
             )[0]
             print(f"It is raining {intensity}.")
-        return intensity, is_raining
+        return intensity, self.is_raining
 
     def fill_blanks(self, intensity=None, is_raining=False):
         """
@@ -292,25 +206,17 @@ class Zoo:
         :param is_raining: if it is raining
         :return: None
         """
-        for i in range(self.height):
-            for j in range(self.width):
+
+        # iterate through the rows and colums of the grid preventing any off by one errors
+        for i in range(self.width):
+            for j in range(self.height):
                 if self.grid[i][j] is None:
-                    # check if the tile is next to water and if so make it grass
-                    neighbors = self.tiles_neighbors(i, j)
-                    for neighbor in neighbors.values():
-                        if (
-                            neighbor
-                            and neighbor.__class__ == Water
-                            or neighbor.__class__ == Grass
-                        ):
-                            self.grid[i][j] = Grass(self)
-                            self.grid[i][j].position = (i, j)
-                            break
+                    if is_raining:
+                        self.make_puddle(i, j, random.randint(1, 10))
                     else:
                         self.grid[i][j] = Dirt()
                         self.grid[i][j].position = (i, j)
-                if is_raining:
-                    self.rain(i, j, intensity)
+                        self.grid[i][j].size = random.randint(1, 10)
 
     def make_puddle(self, x, y, water_size):
         self.grid[x][y] = Water()
@@ -351,23 +257,49 @@ class Zoo:
             self.grid[i][j].size += random.randint(1, 20)
 
     def tiles_neighbors(self, i, j):
-        north_neighbour = self.grid[i - 1][j] if i > 0 else None
-        south_neighbour = self.grid[i + 1][j] if i < self.height - 1 else None
-        east_neighbour = self.grid[i][j + 1] if j < self.width - 1 else None
-        west_neighbour = self.grid[i][j - 1] if j > 0 else None
-        north_east_neighbour = (
-            self.grid[i - 1][j + 1] if i > 0 and j < self.width - 1 else None
-        )
-        north_west_neighbour = self.grid[i - 1][j - 1] if i > 0 and j > 0 else None
-        south_east_neighbour = (
-            self.grid[i + 1][j + 1]
-            if i < self.height - 1 and j < self.width - 1
-            else None
-        )
-        south_west_neighbour = (
-            self.grid[i + 1][j - 1] if i < self.height - 1 and j > 0 else None
-        )
-        neighbors = {
+        try:
+            north_neighbour = self.grid[i - 1][j] if i > 0 else None
+        except IndexError:
+            north_neighbour = None
+        try:
+            south_neighbour = self.grid[i + 1][j] if i < self.height - 1 else None
+        except IndexError:
+            south_neighbour = None
+        try:
+            east_neighbour = self.grid[i][j + 1] if j < self.width - 1 else None
+        except IndexError:
+            east_neighbour = None
+        try:
+            west_neighbour = self.grid[i][j - 1] if j > 0 else None
+        except IndexError:
+            west_neighbour = None
+        try:
+            north_east_neighbour = (
+                self.grid[i - 1][j + 1] if i > 0 and j < self.width - 1 else None
+            )
+        except IndexError:
+            north_east_neighbour = None
+
+        try:
+            north_west_neighbour = self.grid[i - 1][j - 1] if i > 0 and j > 0 else None
+        except IndexError:
+            north_west_neighbour = None
+        try:
+            south_east_neighbour = (
+                self.grid[i + 1][j + 1]
+                if i < self.height - 1 and j < self.width - 1
+                else None
+            )
+        except IndexError:
+            south_east_neighbour = None
+        try:
+            south_west_neighbour = (
+                self.grid[i + 1][j - 1] if i < self.height - 1 and j > 0 else None
+            )
+        except IndexError:
+            south_west_neighbour = None
+
+        return {
             "north": north_neighbour,
             "south": south_neighbour,
             "east": east_neighbour,
@@ -377,7 +309,6 @@ class Zoo:
             "south_east": south_east_neighbour,
             "south_west": south_west_neighbour,
         }
-        return neighbors
 
     def reprocess_tiles(self):
         tiles_to_refresh = []
@@ -385,8 +316,19 @@ class Zoo:
         self.tiles_to_refresh = [
             tile for tile in self.tiles_to_refresh if tile is not None
         ]
+        if self.tiles_to_refresh == ["[]"]:
+            return self
         for tile in self.tiles_to_refresh:
             # check if the tile is occupied by an animal
+            # try to deserialize the tile from a string i.e. '[<environment.grid.Tile object at 0x12928b450>'
+            if isinstance(tile, str):
+                for bracket in ("[", "]"):
+                    tile = tile.replace(bracket, "")
+                tile = tile.split(", ")
+                deserialized_tile = []
+                for item in tile:
+                    item = item.replace("<", "")
+
             if not issubclass(
                 self.grid[tile.position[0]][tile.position[1]].__class__, Animal
             ):
@@ -398,8 +340,19 @@ class Zoo:
         self.tiles_to_refresh = tiles_to_refresh
         return self
 
+    def save_instance(self, zoo_entity):
+        """
+        This method saves the instance of the Zoo to the database.
+        :return:
+        """
 
-def create_zoo(conn, height=35, width=65, options=None, animals=None, plants=None):
+        zoo_entity._instance = None
+        zoo_entity.height = self.height
+        zoo_entity.width = self.width
+        zoo_entity.save()
+
+
+def create_zoo(height=35, width=65, options=None, animals=None, plants=None):
     """
     This function creates the zoo.
     """
@@ -408,41 +361,139 @@ def create_zoo(conn, height=35, width=65, options=None, animals=None, plants=Non
     if options is None:
         options = ["animal", "plant", "water"]
     zoo = Zoo(height=height, width=width)
-    zoo.save(conn)
-    path_to_csv = zoo.csv_path
+    columns_and_types = {
+        "id": "TEXT PRIMARY KEY",
+        "height": "INTEGER",
+        "width": "INTEGER",
+        "created_dt": "TEXT",
+        "updated_dt": "TEXT",
+    }
+    zoo_table = database.Table(table_name="zoos", columns_and_types=columns_and_types)
+    zoo_table.create_table()
+    zoo_entity = database.Entity(
+        table_name="zoos",
+        list_of_values=[
+            zoo.id,
+            zoo.height,
+            zoo.width,
+            zoo.created_dt,
+            zoo.updated_dt,
+        ],
+        columns_and_types=columns_and_types,
+    )
+    inserted_zoo = zoo_entity.insert()
+    zoo = zoo.load_instance(inserted_zoo["id"])
+    tile_schema = {
+        "id": "TEXT PRIMARY KEY",
+        "occupied": "BOOLEAN",
+        "position": "TEXT",
+        "home_id": "TEXT",
+        "type": "TEXT",
+        "created_dt": "TEXT",
+        "updated_dt": "TEXT",
+    }
+    tile_table = database.Table(table_name="tiles", columns_and_types=tile_schema)
+    tile_table.create_table()
+
     water_limit = 0.1 * height * width
     water_placed = 0
+    animal_instances = []
+    plant_instances = []
+    water_instances = []
+    dirt_instances = []
 
     # fill the zoo with random animals
     empty_grid_tiles = zoo.height * zoo.width
-    for row, column in itertools.product(range(height), range(width)):
+    for row, column in itertools.product(range(width), range(height)):
         selection = random.choice(options)
-        zoo = Zoo.load_from_csv(path_to_csv)
-        if selection == "animal":
-            if empty_grid_tiles > 0:
-                empty_grid_tiles -= 1
-                animal = random.choice(animals)
-                animal = animal(home_id=zoo.id)
-                animal.position = [row, column]
-                zoo.add_animal(animal)
-                zoo.grid[row][column] = animal
-        elif selection == "plant":
-            if empty_grid_tiles > 0:
-                empty_grid_tiles -= 1
-                plant = random.choice(plants)
-                plant = plant(home_id=zoo.id)
-                plant.position = [row, column]
-                zoo.add_plant(plant)
-                zoo.grid[row][column] = plant
-        elif selection == "water" and not water_placed > water_limit:
-            if empty_grid_tiles > 0:
-                empty_grid_tiles -= 1
-                water = Water(home_id=zoo.id, position=[row, column])
-                zoo.add_water(water)
-                zoo.grid[row][column] = water
-                water_placed += 1
-        else:
-            dirt = Dirt(position=[row, column], home_id=zoo.id)
-            zoo.grid[row][column] = dirt
-        zoo.save_as_csv()
+        try:
+            if selection == "animal":
+                if empty_grid_tiles > 0:
+                    empty_grid_tiles -= 1
+                    animal = random.choice(animals)
+                    animal = animal(home_id=zoo.id)
+                    animal.position = [row, column]
+                    zoo.grid[row][column] = animal
+                    tile = environment.grid.Tile(
+                        position=[row, column], home_id=zoo.id, _type=animal
+                    )
+                    zoo.tiles_to_refresh.append(tile)
+                    animal_instances.append(animal)
+            elif selection == "plant":
+                if empty_grid_tiles > 0:
+                    empty_grid_tiles -= 1
+                    plant = random.choice(plants)
+                    plant = plant(home_id=zoo.id)
+                    plant.position = [row, column]
+                    zoo.grid[row][column] = plant
+                    tile = environment.grid.Tile(
+                        position=[row, column], home_id=zoo.id, _type=plant
+                    )
+                    zoo.tiles_to_refresh.append(tile)
+                    plant_instances.append(plant)
+            elif selection == "water" and not water_placed > water_limit:
+                if empty_grid_tiles > 0:
+                    empty_grid_tiles -= 1
+                    water_id = str(uuid.uuid4())
+                    water = Water(home_id=zoo.id, position=[row, column], id=water_id)
+                    zoo.grid[row][column] = water
+                    water_placed += 1
+                    tile = environment.grid.Tile(
+                        position=[row, column], home_id=zoo.id, _type=water
+                    )
+                    zoo.tiles_to_refresh.append(tile)
+                    water_instances.append(water)
+            else:
+                dirt_id = str(uuid.uuid4())
+                dirt = Dirt(position=[row, column], home_id=zoo.id, id=dirt_id)
+                zoo.grid[row][column] = dirt
+
+                tile = environment.grid.Tile(
+                    position=[row, column], home_id=zoo.id, _type=dirt
+                )
+                zoo.tiles_to_refresh.append(tile)
+                dirt_instances.append(dirt)
+        except IndexError:
+            continue
+    db = database.DatabaseConnection()
+    for key, value in {
+        "animals": animal_instances,
+        "plants": plant_instances,
+        "water": water_instances,
+        "dirt": dirt_instances,
+    }.items():
+        batch_insert(key, value, zoo, db)
+
+    zoo.save_instance(zoo_entity)
+    zoo = zoo.load_instance(zoo.id)
+
     return zoo
+
+
+def batch_insert(table_name, zoo_list, zoo, db):
+    # create the water
+    _schema = {
+        "id": "TEXT PRIMARY KEY",
+        "home_id": "TEXT REFERENCES zoos(id)",
+        "pickled_instance": "BLOB",
+        "created_dt": "TEXT",
+        "updated_dt": "TEXT",
+    }
+    table = database.Table(table_name=table_name, columns_and_types=_schema)
+    batch = []
+    table.create_table()
+    for item in zoo_list:
+        # pickle the water
+        _id = str(item.id)
+        _pickle = pickle.dumps(item)
+        _entity = database.Entity(
+            table_name=table_name,
+            list_of_values=[
+                _id,
+                zoo.id,
+                _pickle,
+            ],
+            columns_and_types=_schema,
+        )
+        batch.append(_entity)
+    db.insert_many(table_name=table_name, entities=batch)

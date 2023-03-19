@@ -224,16 +224,6 @@ class Animal(Organism):
             current_occupant = self.home_id.self.home_id.grid[direction.position[0]][
                 direction.position[1]
             ]
-        except TypeError:
-            import pdb
-
-            pdb.set_trace()
-            pass
-        except IndexError:
-            import pdb
-
-            pdb.set_trace()
-            pass
         except AttributeError:
             current_occupant = self.home_id.self.home_id.grid[direction[0]][
                 direction[1]
