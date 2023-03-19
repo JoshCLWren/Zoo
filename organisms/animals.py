@@ -336,7 +336,7 @@ class Animal(Organism):
 
     def base_reproduce(self, turn_number):
         if partner := self.check_for_mating_partner():
-            if baby := self.reproduce(partner, home, turn_number):
+            if baby := self.reproduce(partner, turn_number):
                 home.animals.append(baby)
 
         else:
@@ -364,8 +364,9 @@ class Animal(Organism):
 
     def reproduce(self, partner, turn_number):
         # check if both animals have enough energy to reproduce
+        home = environment.buildings.Zoo.load_instance(self.home_id)
         home.check_full()
-        self.check_nearby_tiles(home.grid)
+        self.check_nearby_tiles()
         if home.full:
             return None
         if (
