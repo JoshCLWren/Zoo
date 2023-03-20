@@ -43,10 +43,11 @@ class Plant(Organism):
         This method is called when the plant dies.
         """
         try:
+            home = environment.buildings.Zoo.load_instance(self.home_id)
+            home._instance = None
             self.is_alive = False
-            self.home_id.plants.remove(self)
-
-            self.home_id.home.grid[self.position[0]][self.position[1]] = None
+            home.grid[self.position[0]][self.position[1]] = None
+            home.reprocess_tiles()
         except (TypeError, ValueError) as e:
             logging.error(e)
 

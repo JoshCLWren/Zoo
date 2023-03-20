@@ -18,28 +18,7 @@ class TestAnimals:
     Class for tests around the behaviour of Animal objects.
     """
 
-    @pytest.fixture(autouse=True, scope="class")
-    def fake_animal(self):
-        """
-        Create a test animal.
-        """
-        yield organisms.animals.Animal()
 
-    @pytest.fixture(autouse=True, scope="class")
-    def mock_zoo(self):
-        """
-        Create a test zoo full of plants and water.
-        """
-        yield environment.buildings.create_zoo(
-            height=2, width=2, options=["plant"], plants=[organisms.plants.Grass]
-        )
-
-    @pytest.fixture(autouse=True, scope="class")
-    def fake_water(self):
-        """
-        Create a test water.
-        """
-        yield environment.liquids.Water()
 
     def test_animals_have_ids(self, fake_animal):
         """
@@ -52,7 +31,7 @@ class TestAnimals:
         Test that animals can drink water.
         """
         fake_animal.thirst = 1
-        fake_animal.drink(fake_water, mock_zoo)
+        fake_animal.drink(fake_water)
         assert fake_animal.thirst == 2
 
     def test_animals_can_eat_food(self, mock_zoo, fake_animal):
@@ -65,10 +44,10 @@ class TestAnimals:
         mock_zoo.grid[0][0] = fake_animal
         fake_animal.favorite_food = organisms.plants.Grass
         mock_zoo.grid[0][1] = None
-        mock_zoo.grid[0][1] = organisms.plants.Grass()
+        mock_zoo.grid[0][1] = organisms.plants.Grass(home_id=mock_zoo.id)
         mock_zoo.grid[0][1].position = [0, 1]
 
-        fake_animal.eat(mock_zoo.grid[0][1], mock_zoo)
+        fake_animal.eat(mock_zoo.grid[0][1])
         assert fake_animal.hunger == 2
 
     def test_animals_can_move(self, mock_zoo, fake_animal):
@@ -77,14 +56,23 @@ class TestAnimals:
         """
         # animal needs to be a bit bigger than grass to move
         fake_animal.size = 2
-        assert mock_zoo.grid[0][0].__class__.__name__ == "Animal"
-        assert mock_zoo.grid[0][1].__class__.__name__ == "NoneType"
+        # zoo grid looks like this:
+        # 0 1
+        # 0 Grass Grass
+        # 1 Grass Grass
+        assert mock_zoo.grid[0][0].__class__.__name__ == "Grass"
+        assert mock_zoo.grid[0][1].__class__.__name__ == "Grass"
         assert mock_zoo.grid[1][0].__class__.__name__ == "Grass"
         assert mock_zoo.grid[1][1].__class__.__name__ == "Grass"
         direction = [0, 1]
-        fake_animal.move(direction, mock_zoo)
-        mock_zoo.refresh_grid(visualise=False)
+        fake_animal.move(direction)
+        mock_zoo.grid[0][1] = fake_animal
+        mock_zoo.reprocess_tiles()
         assert fake_animal.position == [0, 1]
+        # zoo grid looks like this:
+        # 0 1
+        # 0 Grass Animal # even though an animal has moved onto the tile, the tile is still grass
+        # 1 Grass Grass
         assert (
             mock_zoo.grid[0][0].__class__.__name__ == "Grass"
         )  # animal moved, so the old position is now dirt
@@ -93,9 +81,15 @@ class TestAnimals:
         assert mock_zoo.grid[1][1].__class__.__name__ == "Grass"
         # stepping on grass shouldn't turn it to None
         direction = [1, 0]
-        fake_animal.move(direction, mock_zoo)
-        mock_zoo.refresh_grid(visualise=False)
-        assert fake_animal.position == [1, 1]
+        fake_animal.move(direction)
+
+        mock_zoo.grid[1][0] = fake_animal
+        mock_zoo.reprocess_tiles()
+        assert fake_animal.position == [1, 0]
+        # zoo grid looks like this:
+        # 0 1
+        # 0 Grass Grass
+        # 1 Grass Animal
         assert mock_zoo.grid[0][0].__class__.__name__ == "Grass"
         assert (
             mock_zoo.grid[0][1].__class__.__name__ == "Grass"

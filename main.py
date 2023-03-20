@@ -10,7 +10,7 @@ import logging
 import sqlite3
 
 from environment.base_elements import Dirt
-from environment.buildings import create_zoo, Zoo
+from environment.buildings import Zoo, create_zoo
 from environment.liquids import Water
 from organisms.animals import (Animal, Elephant, Giraffe, Hyena, Lion, Rhino,
                                Zebra)

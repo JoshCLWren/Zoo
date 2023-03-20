@@ -55,14 +55,11 @@ class Animal(Organism):
         home = environment.buildings.Zoo.load_instance(self.home_id)
         for row, col in itertools.product(range(-1, self.speed), range(-1, self.speed)):
             # check if the home.grid position exists
-            if 0 <= self.position[0] + row < len(
-                home.grid
-            ) and 0 <= self.position[1] + col < len(home.grid[0]):
+            if 0 <= self.position[0] + row < len(home.grid) and 0 <= self.position[
+                1
+            ] + col < len(home.grid[0]):
                 # check if the home.grid position is occupied
-                if (
-                    home.grid[self.position[0] + row][self.position[1] + col]
-                    is None
-                ):
+                if home.grid[self.position[0] + row][self.position[1] + col] is None:
                     self.nearby_unoccupied_tiles.append(
                         [self.position[0] + row, self.position[1] + col]
                     )
@@ -71,15 +68,11 @@ class Animal(Organism):
                     Animal,
                 ):
                     self.animals_nearby.append(
-                        home.grid[self.position[0] + row][
-                            self.position[1] + col
-                        ]
+                        home.grid[self.position[0] + row][self.position[1] + col]
                     )
                 else:
                     self.nearby_occupied_tiles.append(
-                        home.grid[self.position[0] + row][
-                            self.position[1] + col
-                        ]
+                        home.grid[self.position[0] + row][self.position[1] + col]
                     )
 
         for tile in self.nearby_unoccupied_tiles:
@@ -90,9 +83,7 @@ class Animal(Organism):
                 )
                 and (
                     home.grid[tile[0] + row][tile[1] + col] is not None
-                    and isinstance(
-                        home.grid[tile[0] + row][tile[1] + col], Animal
-                    )
+                    and isinstance(home.grid[tile[0] + row][tile[1] + col], Animal)
                 )
                 for row, col in itertools.product(range(-1, 2), range(-1, 2))
             )
@@ -218,18 +209,15 @@ class Animal(Organism):
         This method is called when the animal moves. The direction is a list of two numbers.
         """
         # Only move if the new position is within the home.grid and occupied by None, grass, or dirt
+
         moved = False
         reason_not_to_move = None
         current_occupant = None
         home = environment.buildings.Zoo.load_instance(self.home_id)
         try:
-            current_occupant = home.grid[direction.position[0]][
-                direction.position[1]
-            ]
+            current_occupant = home.grid[direction.position[0]][direction.position[1]]
         except AttributeError:
-            current_occupant = home.grid[direction[0]][
-                direction[1]
-            ]
+            current_occupant = home.grid[direction[0]][direction[1]]
         if current_occupant:
             occupant_is_bigger = (
                 current_occupant.size > self.size if current_occupant else False
@@ -243,36 +231,40 @@ class Animal(Organism):
                 )
 
         if (
-            current_occupant is None
-            or isinstance(current_occupant, Grass)
-            or not reason_not_to_move
+            (
+                current_occupant is None
+                or isinstance(current_occupant, Grass)
+                or not reason_not_to_move
+            )
+            and 0 <= direction[0] < len(home.grid[0])
+            and 0 <= direction[1] < len(home.grid[1])
         ):
-            if current_occupant:
-                new_row = self.position[0] + current_occupant.position[0]
-                new_col = self.position[1] + current_occupant.position[1]
-            else:
-                new_row = direction[0]
-                new_col = direction[1]
-            if 0 <= new_row < len(
-                home.grid
-            ) and 0 <= new_col < len(home.grid[0]):
-                # new position is within the home.grid, so update the position
-                home.grid[self.position[0]][
-                    self.position[1]
-                ] = None
-                self.position[0] = new_row
-                self.position[1] = new_col
-                home.grid[new_row][new_col] = self
-                moved = True
+            # new position is within the home.grid, so update the position
+            home.grid[self.position[0]][self.position[1]] = None
+            self.position = direction
+            home.grid[direction[0]][direction[1]] = self
+            home.reprocess_tiles()
+            moved = True
 
         if moved:
-            self.energy -= 1
-            self.hunger -= 1
-            self.thirst -= 1
-            home.tiles_to_refresh.append(current_occupant)
-            logging.error(f"{self.__class__.__name__} moved to {self.position}.")
+            self.process_after_move(current_occupant)
         elif reason_not_to_move:
             logging.error(reason_not_to_move)
+
+    def process_after_move(self, current_occupant):
+        """
+        This method is called after the animal moves.
+        :param current_occupant:
+        :return:
+        """
+        home = environment.buildings.Zoo.load_instance(self.home_id)
+        self.energy -= 1
+        self.hunger -= 1
+        self.thirst -= 1
+        home.tiles_to_refresh.append(current_occupant)
+        home._instance = None
+        home.save_instance()
+        logging.error(f"{self.__class__.__name__} moved to {self.position}.")
 
     def motivation(self, turn_number):
         """
@@ -397,9 +389,7 @@ class Animal(Organism):
     def base_rest(self):
         if self.motive == "sleep":
             if not self.is_at_safe_spot():
-                if safe_spot := self.look_for_safe_spot(
-                    self.home.grid
-                ):
+                if safe_spot := self.look_for_safe_spot(self.home.grid):
                     self.move(safe_spot)
             if self.energy >= self.max_energy // 2:
                 self.sleep()
@@ -450,15 +440,11 @@ class Animal(Organism):
             if limit is not None and len(food) >= limit:
                 break
             try:
-                if home.grid[self.position[0] + i][
-                    self.position[1] + j
-                ] and isinstance(
+                if home.grid[self.position[0] + i][self.position[1] + j] and isinstance(
                     home.grid[self.position[0] + i][self.position[1] + j],
                     self.favorite_food,
                 ):
-                    food.append(
-                        home.grid[self.position[0] + i][self.position[1] + j]
-                    )
+                    food.append(home.grid[self.position[0] + i][self.position[1] + j])
             except (TypeError, IndexError):
                 continue
         return min(food, key=lambda x: x.size) if food else None
@@ -504,9 +490,7 @@ class Animal(Organism):
             if isinstance(home.grid[i][j], Water)
         ]:
             return min(nearby_water, key=lambda x: x.size)
-        if _drowned := self.check_if_drowned(
-            i_max, i_min, j_max, j_min
-        ):
+        if _drowned := self.check_if_drowned(i_max, i_min, j_max, j_min):
             raise LifeException(self)
         return None
 
@@ -570,6 +554,7 @@ class Animal(Organism):
         """
         # compatible foods are either plants or animals or both. We can derive that by seeing the
         # base class of the favorite food.
+        home = environment.buildings.Zoo.load_instance(self.home_id)
         compatible_food_classes = (
             [self.favorite_food]
             if issubclass(self.favorite_food, Animal)
@@ -580,10 +565,8 @@ class Animal(Organism):
             for compatible_food_class in compatible_food_classes:
                 if isinstance(found_food, (Plant, Corpse)):
                     self.hunger += found_food.nutrition
-                    home.grid[found_food.position[0]][
-                        found_food.position[1]
-                    ] = None
-                    found_food.die(home)
+                    home.grid[found_food.position[0]][found_food.position[1]] = None
+                    found_food.die()
                     self.grow()
                     has_eaten = True
                     break
