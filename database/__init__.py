@@ -148,9 +148,6 @@ class Table:
                     columns.append(column)
                     types.append(_type)
             except AttributeError:
-                import pdb
-
-                pdb.set_trace()
                 pass
         if table_name is None:
             raise ValueError("The table name cannot be None.")
@@ -252,14 +249,15 @@ class Entity(Table):
         """
         return self.dict_response()
 
-    def save(self):
+    def save(self, load_id=None):
         """
         This method saves the entity to the database.
         """
         self.db = DatabaseConnection()
         self.values_placeholder()
         # first try to insert the entity
-        if self.id is None:
+
+        if load_id is None:
             try:
                 self.insert()
                 return True

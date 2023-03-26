@@ -4,7 +4,7 @@ import logging
 import random
 
 import pandas as pd
-
+from environment.grid import Tile
 import environment.base_elements
 from environment.liquids import Water
 from organisms.dead_things import Corpse
@@ -219,6 +219,8 @@ class Animal(Organism):
         except AttributeError:
             current_occupant = home.grid[direction[0]][direction[1]]
         if current_occupant:
+            if isinstance(current_occupant, Tile):
+                current_occupant = current_occupant.type
             occupant_is_bigger = (
                 current_occupant.size > self.size if current_occupant else False
             )
@@ -271,7 +273,7 @@ class Animal(Organism):
         Determines the animal's most urgent need (drink, eat, sleep, or mate).
         """
         if not self.liveness_check():
-            self.die(home, "natural causes")
+            self.die("natural causes")
             raise LifeException(f"{self.__class__.__name__} died of natural causes.")
 
         if self.sleep_counter > 0:
@@ -418,6 +420,7 @@ class Animal(Organism):
                     self.move(direction)
 
     def base_hunger(self, func=None):
+        home = environment.buildings.Zoo.load_instance(self.home_id)
         if func is None:
             func = self.look_for_food
         if self.motive == "eat":
@@ -432,6 +435,7 @@ class Animal(Organism):
         """
         This method is called when the animal looks for food in the reach of the animal's speed.
         """
+        home = environment.buildings.Zoo.load_instance(self.home_id)
         food = []
         for i, j in itertools.product(
             range(-self.speed, self.speed + 1),

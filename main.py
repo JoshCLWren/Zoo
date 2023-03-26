@@ -8,7 +8,7 @@ it's random what animal the player is.
 """
 import logging
 import sqlite3
-
+from environment.grid import Tile
 from environment.base_elements import Dirt
 from environment.buildings import Zoo, create_zoo
 from environment.liquids import Water
@@ -48,6 +48,8 @@ def main():
         dead_things = []
         for row in zoo.grid:
             for thing in row:
+                if isinstance(thing, Tile):
+                    thing = thing.type
                 if not thing:
                     continue
                 if isinstance(thing, (Water, Dirt)):

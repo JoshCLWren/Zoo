@@ -46,7 +46,7 @@ class Zoo:
 
     _instance = None
 
-    def __init__(self, height: int, width: int):
+    def __init__(self, height: int, width: int, id: str = None):
         """
         This method is called when the zoo is created.
         """
@@ -54,7 +54,7 @@ class Zoo:
         self.full: bool = False
         self.height: int = 0
         self.width: int = 0
-        self.id: str = str(uuid.uuid4())
+        self.id: str = str(uuid.uuid4()) if id is None else id
         self.csv_path: str = f"zoo_{self.id}.csv"
         self.created_dt: str = now
         self.updated_dt: str = now
@@ -94,12 +94,17 @@ class Zoo:
         grid = cls.get_all_zoos_things(
             zoo_id=zoo_id, height=zoo_dict["height"], width=zoo_dict["width"]
         )
-        zoo = cls(height=zoo_dict["height"], width=zoo_dict["width"])
+        if zoo_dict.get("id"):
+            zoo = cls(id=zoo_dict["id"], height=zoo_dict["height"], width=zoo_dict["width"])
+        else:
+            zoo = cls(height=zoo_dict["height"], width=zoo_dict["width"])
         zoo.grid = grid
         for key, value in zoo_dict.items():
             if key == "grid":
                 continue
             setattr(zoo, key, value)
+
+        cls._instance = zoo
         return zoo
 
     def refresh_from_db(self):
@@ -169,7 +174,13 @@ class Zoo:
         # center the grid in the console
         if visualise:
             for row in self.grid:
-                print("".join([cell.emoji for cell in row]))
+                row_emojis = []
+                for cell in row:
+                    if isinstance(cell, Tile):
+                        row_emojis.append(cell.type.emoji)
+                    else:
+                        row_emojis.append(cell.emoji)
+                print("".join([cell for cell in row_emojis]))
 
     @staticmethod
     def get_all_zoos_things(zoo_id: str, height: int, width: int):
@@ -373,7 +384,7 @@ class Zoo:
         This method saves the instance of the Zoo to the database.
         :return:
         """
-
+        load_id = self.id or None
         self._instance = None
         columns_to_update = zoo_schema_as_dict()
         columns_to_update.pop("id")
@@ -381,12 +392,12 @@ class Zoo:
         for key, value in columns_to_update.items():
             value = getattr(self, key)
             updated_values[key] = value
-        updated_values["id"] = self.id
+        # updated_values["id"] = self.id
         list_of_values = [val for val in updated_values.values()]
         if updated_zoo := database.Entity(
-            columns_and_types=columns_to_update, list_of_values=list_of_values, table_name="zoo"
+            columns_and_types=columns_to_update, list_of_values=list_of_values, table_name="zoos"
         ):
-            updated_zoo.save()
+            updated_zoo.save(load_id=load_id)
             self.refresh_from_db()
             return self
         else:

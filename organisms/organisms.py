@@ -1,7 +1,7 @@
 from uuid import uuid4
 
 from faker import Faker
-
+import logging
 faker = Faker()
 
 

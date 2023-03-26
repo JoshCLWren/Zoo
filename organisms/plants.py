@@ -111,11 +111,21 @@ class Plant(Organism):
             return
         self.check_nearby_tiles()
         if any(home.grid[x][y] is None for x, y in self.nearby_unoccupied_tiles):
-            baby_plant = self.__class__(home_id=self.home_id)
-            baby_plant.position = random.choice(self.unoccupied_tiles)
-            home.add_plant(baby_plant)
-            self.unoccupied_tiles.remove(baby_plant.position)
-            self.nearby_unoccupied_tiles.remove(baby_plant.position)
+            return self.place_plant_baby()
+
+    def place_plant_baby(self):
+        """
+        This method is called when the plant places a baby plant.
+        :return:
+        """
+        home = environment.buildings.Zoo.load_instance(self.home_id)
+        baby_plant = self.__class__(home_id=self.home_id)
+        baby_plant.position = random.choice(self.unoccupied_tiles)
+        self.unoccupied_tiles.remove(baby_plant.position)
+        self.nearby_unoccupied_tiles.remove(baby_plant.position)
+        home.grid[baby_plant.position[0]][baby_plant.position[1]] = baby_plant
+        home.reprocess_tiles()
+        return baby_plant
 
 
 class Tree(Plant):

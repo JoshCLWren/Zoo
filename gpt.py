@@ -34,9 +34,7 @@ def ask_gpt(prompt):
 
     # Make the API request
     response = requests.post(url, json=data, headers=headers)
-    import pdb
 
-    pdb.set_trace()
     print(response.json())
 
 
