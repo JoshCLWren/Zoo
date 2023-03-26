@@ -16,12 +16,15 @@ def mock_zoo():
     yield environment.buildings.create_zoo(
         height=2, width=2, options=["plant"], plants=[organisms.plants.Grass]
     )
+
+
 @pytest.fixture()
 def fake_animal(mock_zoo):
     """
     Create a test animal.
     """
     yield organisms.animals.Animal(home_id=mock_zoo.id)
+
 
 @pytest.fixture()
 def fake_water(mock_zoo):

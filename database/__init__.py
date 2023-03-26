@@ -3,7 +3,6 @@ Singleton patterns for database connection and cursors and error handling and en
 """
 
 import sqlite3
-import uuid
 
 import arrow
 

@@ -17,8 +17,7 @@ import environment.grid
 from environment.base_elements import Dirt
 from environment.grid import Tile, create_tiles_table
 from environment.liquids import Water
-from organisms.animals import (Animal, Elephant, Giraffe, Hyena, Lion, Rhino,
-                               Zebra)
+from organisms.animals import Animal, Elephant, Giraffe, Hyena, Lion, Rhino, Zebra
 from organisms.dead_things import Corpse
 from organisms.plants import Bush, Grass, Tree
 
@@ -185,17 +184,31 @@ class Zoo:
             "created_dt": "TEXT",
             "updated_dt": "TEXT",
         }
-        tiles = {
-            "animals": database.Entity.load_all(
+        try:
+            animals = database.Entity.load_all(
                 "animals", zoo_id, schema=zoo_tiles_schema
-            ),
-            "plants": database.Entity.load_all(
-                "plants", zoo_id, schema=zoo_tiles_schema
-            ),
-            "water_sources": database.Entity.load_all(
+            )
+        except sqlite3.OperationalError:
+            animals = []
+        try:
+            plants = database.Entity.load_all("plants", zoo_id, schema=zoo_tiles_schema)
+        except sqlite3.OperationalError:
+            plants = []
+        try:
+            water_sources = database.Entity.load_all(
                 "water", zoo_id, schema=zoo_tiles_schema
-            ),
-            "dirt": database.Entity.load_all("dirt", zoo_id, schema=zoo_tiles_schema),
+            )
+        except sqlite3.OperationalError:
+            water_sources = []
+        try:
+            dirt = database.Entity.load_all("dirt", zoo_id, schema=zoo_tiles_schema)
+        except sqlite3.OperationalError:
+            dirt = []
+        tiles = {
+            "animals": animals,
+            "plants": plants,
+            "water_sources": water_sources,
+            "dirt": dirt,
         }
         grid = make_blank_grid(height, width)
         if not tiles:
@@ -368,8 +381,10 @@ class Zoo:
         for key, value in columns_to_update.items():
             value = getattr(self, key)
             updated_values[key] = value
+        updated_values["id"] = self.id
+        list_of_values = [val for val in updated_values.values()]
         if updated_zoo := database.Entity(
-            id=self.id, columns_and_types=columns_to_update, **updated_values
+            columns_and_types=columns_to_update, list_of_values=list_of_values, table_name="zoo"
         ):
             updated_zoo.save()
             self.refresh_from_db()

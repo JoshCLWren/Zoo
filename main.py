@@ -12,8 +12,7 @@ import sqlite3
 from environment.base_elements import Dirt
 from environment.buildings import Zoo, create_zoo
 from environment.liquids import Water
-from organisms.animals import (Animal, Elephant, Giraffe, Hyena, Lion, Rhino,
-                               Zebra)
+from organisms.animals import Animal, Elephant, Giraffe, Hyena, Lion, Rhino, Zebra
 from organisms.organisms import LifeException
 from organisms.plants import Bush, Grass, Tree
 

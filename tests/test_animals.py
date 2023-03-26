@@ -18,8 +18,6 @@ class TestAnimals:
     Class for tests around the behaviour of Animal objects.
     """
 
-
-
     def test_animals_have_ids(self, fake_animal):
         """
         Test that animals have ids.

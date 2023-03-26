@@ -5,3 +5,4 @@
 .coverage
 *.csv
 zoo.db
+__pycache__
