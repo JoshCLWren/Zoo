@@ -303,9 +303,17 @@ class Entity(Table):
         sql = f"""
         SELECT * FROM {table_name} WHERE home_id = ?
         """
+        if not foreign_key:
+            sql = f"""
+            SELECT * FROM {table_name}
+            """
+
         try:
             db = DatabaseConnection()
-            db.execute(sql, [foreign_key])
+            if foreign_key:
+                db.execute(sql, [foreign_key])
+            else:
+                db.execute(sql)
             rows = db.fetchall()
             if schema:
                 # return the rows as a list of dictionaries

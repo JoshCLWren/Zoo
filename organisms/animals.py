@@ -429,7 +429,7 @@ class Animal(Organism):
                 self.eat(found_food, home)
             else:
                 # move towards random direction
-                self.move([random.randint(-1, 1), random.randint(-1, 1)], home)
+                self.move([random.randint(-1, 1), random.randint(-1, 1)])
 
     def look_for_food(self, limit=None):
         """

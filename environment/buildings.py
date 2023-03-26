@@ -95,7 +95,9 @@ class Zoo:
             zoo_id=zoo_id, height=zoo_dict["height"], width=zoo_dict["width"]
         )
         if zoo_dict.get("id"):
-            zoo = cls(id=zoo_dict["id"], height=zoo_dict["height"], width=zoo_dict["width"])
+            zoo = cls(
+                id=zoo_dict["id"], height=zoo_dict["height"], width=zoo_dict["width"]
+            )
         else:
             zoo = cls(height=zoo_dict["height"], width=zoo_dict["width"])
         zoo.grid = grid
@@ -172,6 +174,7 @@ class Zoo:
         # print the emoji representation of the grid to the console, with each row on a new line
         # print the grid to the console in the form of a matrix
         # center the grid in the console
+        grid = []
         if visualise:
             for row in self.grid:
                 row_emojis = []
@@ -180,7 +183,9 @@ class Zoo:
                         row_emojis.append(cell.type.emoji)
                     else:
                         row_emojis.append(cell.emoji)
+                grid.append(row_emojis)
                 print("".join([cell for cell in row_emojis]))
+        return grid
 
     @staticmethod
     def get_all_zoos_things(zoo_id: str, height: int, width: int):
@@ -395,7 +400,9 @@ class Zoo:
         # updated_values["id"] = self.id
         list_of_values = [val for val in updated_values.values()]
         if updated_zoo := database.Entity(
-            columns_and_types=columns_to_update, list_of_values=list_of_values, table_name="zoos"
+            columns_and_types=columns_to_update,
+            list_of_values=list_of_values,
+            table_name="zoos",
         ):
             updated_zoo.save(load_id=load_id)
             self.refresh_from_db()
