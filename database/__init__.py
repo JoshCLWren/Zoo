@@ -127,6 +127,9 @@ class DatabaseConnection:
         self.cur.executemany(sql, _values)
         self.conn.commit()
 
+    def __del__(self):
+        self.conn.close()
+
 
 class Table:
     """
@@ -277,17 +280,27 @@ class Entity(Table):
                 return False
 
     @classmethod
-    def load(cls, id):
+    def load(cls, id, table_name=None):
         """
         This method loads the entity from the database.
         """
+        if not isinstance(id, str):
+            id = str(id)
+        if table_name is None:
+            table_name = cls.table_name
+        if table_name in ("elephant", "zebra", "lion", "giraffe"):
+            table_name = "animals"
+        if table_name in ("bush", "tree", "grass", "flower"):
+            table_name = "plants"
         sql = f"""
-        SELECT * FROM {cls.table_name} WHERE id=%s(id)s
+        SELECT * FROM {table_name} WHERE id=?
         """
         try:
-            self.db.execute(sql, [id])
-            row = self.db.fetchone()
-            return cls(*row)
+            db = DatabaseConnection()
+            db.execute(sql, [id])
+            row = db.fetchone()
+            cols = [column[0] for column in db.cur.description]
+            return dict(zip(cols, row))
         except DatabaseError as e:
             print(e)
             return False

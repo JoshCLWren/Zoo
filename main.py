@@ -2,19 +2,25 @@
 Zoo is a game about what happens when the humans disappear and the animals take over.
 The game is an overhead view of a zoo, where the player is given the role of one of the animals.
 The goal is to survive as long as possible, and to do so the player must eat, sleep, and reproduce.
-The player can also interact with other animals, and the player can also interact with the environment.
-The player can be a carnivore, herbivore, or omnivore, and the player can be a predator or prey since
-it's random what animal the player is.
+The player can also interact with other animals, and the player can also interact with the
+environment. The player can be a carnivore, herbivore, or omnivore, and the player can be a
+predator or prey since it's random what animal the player is.
 """
+
 import logging
 import sqlite3
-from environment.grid import Tile
+
+import database
 from environment.base_elements import Dirt
 from environment.buildings import Zoo, create_zoo
+from environment.grid import Tile
 from environment.liquids import Water
-from organisms.animals import Animal, Elephant, Giraffe, Hyena, Lion, Rhino, Zebra
+from organisms.animals import (Animal, Elephant, Giraffe, Hyena, Lion, Rhino,
+                               Zebra)
 from organisms.organisms import LifeException
 from organisms.plants import Bush, Grass, Tree
+
+#pylint: disable=line-too-long
 
 logging.disable(logging.CRITICAL)
 
@@ -23,8 +29,24 @@ def main():
     """
     This function is the main function of the game.
     """
-
+    db_connection = database.DatabaseConnection()
     # create the zoo
+    try:
+        simulate()
+    except Exception as e:
+        print(e)
+        db_connection.close()
+    except KeyboardInterrupt:
+        print("Keyboard interrupt, closing database connection")
+        db_connection.close()
+    db_connection.close()
+
+
+def simulate():
+    """
+    Simulate the zoo.
+    :return:
+    """
     zoo = create_zoo(
         animals=[Elephant, Giraffe, Hyena, Lion, Rhino, Zebra],
         plants=[Bush, Grass, Tree],
@@ -62,6 +84,7 @@ def main():
                         continue
                     zoo = Zoo.load_instance(thing.home_id)
                     zoo.reprocess_tiles()
+                    zoo.refresh_grid()
                     action = thing.turn(turn_number=turn)
                     if action == "died":
                         dead_things.append(thing)

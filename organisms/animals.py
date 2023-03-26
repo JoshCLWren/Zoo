@@ -3,16 +3,16 @@ import itertools
 import logging
 import random
 
-import pandas as pd
-from environment.grid import Tile
+
 import environment.base_elements
+from environment.grid import Tile
 from environment.liquids import Water
 from organisms.dead_things import Corpse
 from organisms.organisms import LifeException, Organism
 from organisms.plants import Bush, Grass, Plant, Tree
 
 
-class Animal(Organism):
+class Animal(Organism): # pylint: disable=too-many-public-methods
     """
     This is the base class for all animals.
     """
@@ -166,7 +166,7 @@ class Animal(Organism):
         self.thirst = 0
         self.energy = 0
         self.virility = 0
-        self.is_alive = False
+        self.is_alive = False # pylint: disable=attribute-defined-outside-init
         # remove the animal from the home.grid
         home.grid[self.position[0]][self.position[1]] = None
         # remove the animal from the home
@@ -214,10 +214,16 @@ class Animal(Organism):
         reason_not_to_move = None
         current_occupant = None
         home = environment.buildings.Zoo.load_instance(self.home_id)
+        direction_type = type(direction)
         try:
             current_occupant = home.grid[direction.position[0]][direction.position[1]]
         except AttributeError:
             current_occupant = home.grid[direction[0]][direction[1]]
+
+        if not isinstance(direction_type, list):
+            # if the direction is not a list, convert it to a list
+            direction = list(direction)
+
         if current_occupant:
             if isinstance(current_occupant, Tile):
                 current_occupant = current_occupant.type
@@ -245,14 +251,14 @@ class Animal(Organism):
             home.grid[self.position[0]][self.position[1]] = None
             self.position = direction
             home.grid[direction[0]][direction[1]] = self
-            home.reprocess_tiles()
+            self.process_after_move(current_occupant)
             moved = True
 
         if moved:
-            self.process_after_move(current_occupant)
+            logging.error(f"{self.__class__.__name__} moved to {self.position}.")
         elif reason_not_to_move:
-            logging.error(reason_not_to_move)
-
+            # logging.error(reason_not_to_move)
+            pass
     def process_after_move(self, current_occupant):
         """
         This method is called after the animal moves.
@@ -265,8 +271,9 @@ class Animal(Organism):
         self.thirst -= 1
         home.tiles_to_refresh.append(current_occupant)
         home._instance = None
+        home.grid[self.position[0]][self.position[1]] = self
+        home.reprocess_tiles()
         home.save_instance()
-        logging.error(f"{self.__class__.__name__} moved to {self.position}.")
 
     def motivation(self, turn_number):
         """
@@ -304,13 +311,17 @@ class Animal(Organism):
         """
         Determines if the animal is still alive.
         """
-        self.is_alive = (
+        is_alive = (
             self.age <= self.max_age
             and self.hunger > 0
             and self.thirst > 0
             and self.energy > 0
         )
         self.look_for_water()
+        if self.is_alive != is_alive:
+            self.is_alive = is_alive # pylint: disable=attribute-defined-outside-init
+            if not is_alive:
+                self.die("natural causes")
         return self.is_alive
 
     def turn(self, turn_number):
@@ -685,10 +696,14 @@ class Predator(Carnivore):
         return self.motive
 
     def predator_hunger(self):
+        """
+        This method is called when the predator is hungry.
+        :return:
+        """
         if self.motive == "hunger":
             if found_food := self.hunt():
                 self.move(found_food)
-                self.eat(found_food, home)
+                self.eat(found_food)
 
     def hunt(self):
         """

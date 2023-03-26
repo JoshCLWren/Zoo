@@ -1,6 +1,9 @@
-import requests
+import ast
+import inspect
 import os
-
+import openai
+import requests
+import time
 
 # Print the response
 
@@ -10,165 +13,165 @@ def ask_gpt(prompt):
     Ask GPT-4 a question and return the response
     """
 
-    prompt_prefix = "Here is a part of a zoo app that I am working on. Please make suggestions for refactoring it. CODE:"
+    prompt_prefix = "Are there any bugs in this code? :\n\n"
     # Set the API endpoint URL
-    url = "https://api.openai.com/v1/engines/davinci-codex/completions"
 
-    # Set the API key
-    api_key = os.environ.get("api_key")
 
     # Set the prompt for the AI to complete
     prompt = prompt_prefix + prompt
 
     # Set the parameters for the API request
-    data = {
-        "prompt": prompt,  # The prompt for the AI to complete
-        "max_tokens": 50,  # The maximum number of tokens to generate a token is a word or a punctuation mark
-        "temperature": 0.5,  # The temperature for the AI to generate the response which controls the randomness of the response
-        "n": 1,  # The number of responses to generate for the prompt
-        "stop": "\n",  # The character to stop the response generation
-    }
+    print("Asking GPT for a refactor...")
+    start_time = time.time()
+    session = openai.Completion.create(
+        engine="davinci",
+        prompt=prompt,
+        temperature=0.9,
+        max_tokens=150,
+        top_p=1,
+        frequency_penalty=0,
+        presence_penalty=0,
+    )
+    print("GPT took", time.time() - start_time, "seconds to respond")
 
-    # Set the request headers with the API key
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+    session = session["choices"][0]["text"]
 
-    # Make the API request
-    response = requests.post(url, json=data, headers=headers)
-
-    print(response.json())
+    print(session)
+    return session
 
 
 # create a script that iterates through each python file except for this one in this project
 # and by class and by method makes a request to chat gpt for each class and method asking for refactors
 # and then prints the response
 
-import inspect
 import os
-import sys
-import ast
 
+def get_python_files(directory):
+    """
+    Returns a list of all Python files in the specified directory.
+    """
+    python_files = []
+    for file in os.listdir(directory):
+        if file.endswith('.py'):
+            python_files.append(file)
+    return python_files
 
-def get_methods_in_module(module):
-    return inspect.getmembers(module, inspect.isfunction)
+def get_code_blocks(file):
+    """
+    Returns a list of all code blocks in the specified file.
+    """
+    with open(file, 'r') as f:
+        lines = f.readlines()
+    code_blocks = []
+    block = ''
+    in_block = False
+    for line in lines:
+        if line.strip().startswith('def ') or line.strip().startswith('class '):
+            if in_block:
+                code_blocks.append(block)
+                block = ''
+                in_block = False
+            block += line
+            in_block = True
+        elif line.strip().startswith('#'):
+            block += line
+        else:
+            if in_block:
+                code_blocks.append(block)
+                block = ''
+                in_block = False
+            block += line
+    if block:
+        code_blocks.append(block)
+    return code_blocks
 
+def get_directories(directory):
+    """
+    Returns a list of all directories in the specified directory.
+    """
+    directories = []
+    for file in os.listdir(directory):
+        if os.path.isdir(file):
+            directories.append(file)
+    return directories
 
-def scan_directory_for_modules(path, modules=[]):
-    ignored_directories = [
-        "__pycache__",
-        ".git",
-        "venv",
-        "node_modules",
-        ".idea",
-        ".pytest_cache",
-        "htmlcov",
-    ]
-    # import pdb
+def scan_code(directory):
+    directories = get_directories(directory)
+    python_files = get_python_files(directory)
+    print(f"Directory: {directory} contains {len(directories)} directories and {len(python_files)} Python files.")
+    i = 0
+    for i, file in enumerate(python_files):
+        print(f'{i+1}. {file}')
+    directory_change = i + 2
+    print(f'{directory_change}. Change Directory')
 
-    # pdb.set_trace()
-    # Get all modules in the specified directory
-    for root, dirs, files in os.walk(path):
-        for dir in dirs:
-            print(f"dir: {dir}")
-            if len(dir) == 2:
-                return modules
-            if dir not in ignored_directories:
-                print(f"dir: {dir} not in ignored directories")
-                modules += scan_directory_for_modules(dir)
-        for file in files:
-            print(f"file: {file}")
-            if file.endswith(".py") and file != os.path.basename(__file__):
-                print(f"file: {file} ends with .py")
-                module_name = os.path.splitext(file)[0]
-                try:
-                    # add the contents of the module file to the modules list without using the import keyword
-                    # which would cause the module to be executed
-                    module = ast.parse(open(file).read())
-                    module.__name__ = module_name
-                    modules.append(module)
-                    print(f"module: {module} appended to modules list")
+    selection = input('Enter the number of a Python file to display its code blocks: ')
+    if selection == str(directory_change):
+        # print the directories
+        for i, directory in enumerate(directories):
+            print(f'{i+1}. {directory}')
+        go_back = i + 2
+        print(f'{go_back}. Go Back')
+        selection = input('Enter the number of a directory to scan: ')
+        if selection == str(go_back):
+            return scan_code(directory=directory)
+        try:
+            if int(selection) > len(directories):
+                print('Invalid selection.')
+                exit()
+            directory = directories[int(selection) - 1]
+            return scan_code(directory=directory)
+        except:
+            print('Invalid selection.')
+            exit()
+    selected_file = ""
+    try:
+        file_index = int(selection) - 1
+        selected_file = python_files[file_index]
+    except:
+        print('Invalid selection.')
+        exit()
 
-                except FileNotFoundError:
-                    print(f"file not found: {file}")
-                    pass
-    return modules
+    code_blocks = get_code_blocks(selected_file)
 
+    print('Code blocks in file:')
+    for i, block in enumerate(code_blocks):
+        if len(block.strip()) == 0:
+            continue
+        print(f'{i+1}. {block.strip()[:50]}...') # print only first 50 chars of block
 
-if __name__ == "__main__":
-    # Get the path argument from the command line
-    path = "./"
+    print(f'{i+2}. Whole File') # add the option to select the whole file as a code block
 
-    # Scan the directory for modules
-    modules = scan_directory_for_modules(path)
-    print(len(modules))
-    # Print the method names in each module
-    for module in modules:
-        # ast_methods is a list of ast nodes
-        # each node has a name and a body
-        # the name is the name of the method
-        # the body is the body of the method
-        for obj in module.body:
-            if isinstance(obj, ast.FunctionDef):
-                print(obj.name)
-                print(obj.body)
-                print("")
-            if isinstance(obj, ast.ClassDef):
-                print(obj.name)
-                print(obj.body)
-                print("")
-            if isinstance(obj, ast.Assign):
-                print(obj.targets)
-                print(obj.value)
-                print("")
-            if isinstance(obj, ast.Expr):
-                print(obj.value)
-                print("")
-            if isinstance(obj, ast.Import):
-                print(obj.names)
-                print("")
-            if isinstance(obj, ast.ImportFrom):
-                print(obj.names)
-                print("")
-            if isinstance(obj, ast.AnnAssign):
-                print(obj.target)
-                print(obj.value)
-                print("")
-            if isinstance(obj, ast.AugAssign):
-                print(obj.target)
-                print(obj.value)
-                print("")
-            if isinstance(obj, ast.Await):
-                print(obj.value)
-                print("")
-            if isinstance(obj, ast.AsyncFor):
-                print(obj.target)
-                print(obj.iter)
-                print(obj.body)
-                print("")
-            if isinstance(obj, ast.AsyncFunctionDef):
-                print(obj.name)
-                print(obj.body)
-                print("")
-            if isinstance(obj, ast.AsyncWith):
-                print(obj.items)
-                print(obj.body)
-                print("")
-            if isinstance(obj, ast.Assert):
-                print(obj.test)
-                print(obj.msg)
-                print("")
-            if isinstance(obj, ast.Assign):
-                print(obj.targets)
-                print(obj.value)
-                print("")
-            if isinstance(obj, ast.AugAssign):
-                print(obj.target)
-                print(obj.value)
-                print("")
-            if isinstance(obj, ast.Await):
-                print(obj.value)
-                print("")
-            if isinstance(obj, ast.BinOp):
-                print(obj.left)
-                print(obj.op)
-                print(obj.right)
-                print("")
+    selection = input('Enter the number of a code block to display its contents: ')
+
+    try:
+        block_index = int(selection) - 1
+        if block_index == i+1: # if the user selected the whole file
+            selected_block = ''.join(code_blocks) # concatenate all code blocks
+        else:
+            selected_block = code_blocks[block_index]
+    except:
+        print('Invalid selection.')
+        exit()
+
+    return selected_block
+
+def main():
+    while True:
+        local = input('Scan local code? (y/n): ')
+        if local == 'y':
+            directory = "." # scan the current directory
+        elif local == 'n':
+            directory = input('Enter the directory to scan: ')
+        else:
+            print('Invalid selection.')
+            continue
+        code_block = scan_code(directory=directory)
+        print(code_block)
+        ask_gpt(code_block)
+        continue_prompt = input('Continue? (y/n): ')
+        if continue_prompt == 'n':
+            break
+
+if __name__ == '__main__':
+    main()

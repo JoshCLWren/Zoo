@@ -66,6 +66,8 @@ class TestAnimals:
         fake_animal.move(direction)
         mock_zoo.grid[0][1] = fake_animal
         mock_zoo.reprocess_tiles()
+        mock_zoo.refresh_grid()
+
         assert fake_animal.position == [0, 1]
         # zoo grid looks like this:
         # 0 1
@@ -83,6 +85,7 @@ class TestAnimals:
 
         mock_zoo.grid[1][0] = fake_animal
         mock_zoo.reprocess_tiles()
+        mock_zoo.refresh_grid()
         assert fake_animal.position == [1, 0]
         # zoo grid looks like this:
         # 0 1
@@ -92,5 +95,5 @@ class TestAnimals:
         assert (
             mock_zoo.grid[0][1].__class__.__name__ == "Grass"
         )  # animal stepped on grass, so it's still there
-        assert mock_zoo.grid[1][0].__class__.__name__ == "Grass"
-        assert mock_zoo.grid[1][1].__class__.__name__ == "Animal"
+        assert mock_zoo.grid[1][0].__class__.__name__ == "Animal"
+        assert mock_zoo.grid[1][1].__class__.__name__ == "Grass"

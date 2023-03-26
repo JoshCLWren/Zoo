@@ -2,7 +2,6 @@ import contextlib
 import datetime
 import io
 import itertools
-import logging
 import pickle
 import random
 import sqlite3
@@ -17,7 +16,8 @@ import environment.grid
 from environment.base_elements import Dirt
 from environment.grid import Tile, create_tiles_table
 from environment.liquids import Water
-from organisms.animals import Animal, Elephant, Giraffe, Hyena, Lion, Rhino, Zebra
+from organisms.animals import (Animal, Elephant, Giraffe, Hyena, Lion, Rhino,
+                               Zebra)
 from organisms.dead_things import Corpse
 from organisms.plants import Bush, Grass, Tree
 
@@ -144,27 +144,13 @@ class Zoo:
         param visualise: bool - whether to print the grid to the console or not (default: True).
         :return:
         """
+        self.reprocess_tiles()
         self.refresh_from_db()
         # check self.tiles_to_refresh and replace the tiles with what they were before an animal moved
-        # to that tile
-        for key, value in self.__dict__.items():
-            if key in [
-                "animals",
-                "plants",
-                "water_sources",
-                "tiles_to_refresh",
-            ] and isinstance(value, str):
-                value = value.split(",")
-            if value == "[]":
-                value = []
 
-            setattr(self, key, value)
-        grid = self.get_all_zoos_things(
-            zoo_id=self.id, height=self.height, width=self.width
-        )
 
-        self.grid = grid
-        self.reprocess_tiles()
+
+
         intensity, is_raining = self.weather()
         # fill any vacant tiles with dirt
         self.fill_blanks(intensity)
@@ -230,6 +216,8 @@ class Zoo:
         if not tiles:
             # if there are no tiles yet then there is no need to refresh the grid
             raise ZooError("No tiles found in the database.")
+        # find any tiles that share the same position and replace them with the latest version
+
         for value in tiles.values():
             for entity in value:
                 if entity.get("pickled_instance") is None:
@@ -237,7 +225,21 @@ class Zoo:
                 value = entity.get("pickled_instance")
                 file_data = io.BytesIO(value)
                 tile = pickle.load(file_data)
-                grid[tile.position[0]][tile.position[1]] = tile
+                if grid[tile.position[0]][tile.position[1]] is None:
+                    grid[tile.position[0]][tile.position[1]] = tile
+                else:
+                    current_tile = grid[tile.position[0]][tile.position[1]]
+                    current_tile_from_db = database.Entity.load(
+                        id=current_tile.id, table_name=current_tile.__class__.__name__.lower()
+                    )
+                    tile_from_db = database.Entity.load(
+                        id=tile.id, table_name=tile.__class__.__name__.lower()
+                    )
+                    if current_tile_from_db["updated_dt"] < tile_from_db["updated_dt"]:
+                        most_recent_tile = tile
+                    else:
+                        most_recent_tile = current_tile
+                    grid[tile.position[0]][tile.position[1]] = most_recent_tile
         return grid
 
     def weather(self):
@@ -366,13 +368,21 @@ class Zoo:
         }
 
     def reprocess_tiles(self):
-        tiles_to_refresh = []
-        # remove and None values from self.tiles_to_refresh
-        self.tiles_to_refresh = [
-            tile for tile in self.tiles_to_refresh if tile is not None
-        ]
+        """
+        This method reprocesses the tiles that have been changed.
+        :return:
+        """
+        new_tiles_to_refresh = []
+        tiles_to_remove = []
 
         for tile in self.tiles_to_refresh:
+            if tile is None:
+                tiles_to_remove.append(tile)
+                continue
+
+            if isinstance(tile, Tile):
+                tile = tile.type
+
             if not issubclass(
                 self.grid[tile.position[0]][tile.position[1]].__class__, Animal
             ):
@@ -380,9 +390,14 @@ class Zoo:
                 self.grid[tile.position[0]][tile.position[1]] = tile
             else:
                 # if it isn't, add it to the list of tiles to refresh
-                tiles_to_refresh.append(tile)
-        self.tiles_to_refresh = tiles_to_refresh
-        return self
+                new_tiles_to_refresh.append(tile)
+
+        # remove any None values from self.tiles_to_refresh
+        for tile in tiles_to_remove:
+            self.tiles_to_refresh.remove(tile)
+
+        # replace the old list with the new one
+        self.tiles_to_refresh = new_tiles_to_refresh
 
     def save_instance(self):
         """
