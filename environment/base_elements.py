@@ -4,9 +4,8 @@ These are the elements that are not animals or plants or water or buildings.
 """
 
 import uuid
-
-
-class Dirt:
+from assets import GameAsset
+class Dirt(GameAsset):
     """
     This is the class for dirt.
     """
@@ -15,6 +14,7 @@ class Dirt:
         """
         This method is called when dirt is created.
         """
+        super().__init__()
         if position is None:
             position = [0, 0]
         self.size = 1

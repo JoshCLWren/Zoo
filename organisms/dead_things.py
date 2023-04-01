@@ -1,4 +1,6 @@
-class Corpse:
+from assets import GameAsset
+
+class Corpse(GameAsset):
     """
     This is the class for dead animals.
     """
@@ -7,6 +9,7 @@ class Corpse:
         """
         This method is called when the dead animal is created.
         """
+        super().__init__()
         self.former_animal = former_animal.__str__()
         self.nutrients = former_animal.size + former_animal.virility
         self.size = former_animal.size
@@ -30,3 +33,6 @@ class Corpse:
 
         self.die(*args, **kwargs)
         return "decomposed"
+
+    def __str__(self):
+        return "Corpse"

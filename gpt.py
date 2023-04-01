@@ -1,9 +1,10 @@
 import ast
 import inspect
 import os
+import time
+
 import openai
 import requests
-import time
 
 # Print the response
 
@@ -45,6 +46,7 @@ def ask_gpt(prompt):
 # and then prints the response
 
 import os
+
 
 def get_python_files(directory):
     """

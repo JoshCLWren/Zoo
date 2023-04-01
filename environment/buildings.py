@@ -5,6 +5,9 @@ import itertools
 import pickle
 import random
 import sqlite3
+import os
+import platform
+import time
 import uuid
 from dataclasses import dataclass, field
 
@@ -138,6 +141,8 @@ class Zoo:
 
         return "Zoo"
 
+
+
     def refresh_grid(self, visualise=True):
         """
         This method is called when the grid is updated.
@@ -146,31 +151,31 @@ class Zoo:
         """
         self.reprocess_tiles()
         self.refresh_from_db()
-        # check self.tiles_to_refresh and replace the tiles with what they were before an animal moved
-
-
-
 
         intensity, is_raining = self.weather()
-        # fill any vacant tiles with dirt
         self.fill_blanks(intensity)
         self._instance = None
         self._instance = self.load_instance(zoo_id=self.id)
 
-        # print the emoji representation of the grid to the console, with each row on a new line
-        # print the grid to the console in the form of a matrix
-        # center the grid in the console
         grid = []
-        if visualise:
-            for row in self.grid:
-                row_emojis = []
-                for cell in row:
-                    if isinstance(cell, Tile):
-                        row_emojis.append(cell.type.emoji)
-                    else:
-                        row_emojis.append(cell.emoji)
-                grid.append(row_emojis)
+
+        # Clear the console screen
+        # os.system("cls" if platform.system().lower() == "windows" else "clear")
+
+        for row in self.grid:
+            row_emojis = []
+            for cell in row:
+                if isinstance(cell, Tile):
+                    row_emojis.append(cell.type.emoji)
+                else:
+                    row_emojis.append(cell.emoji)
+            grid.append(row_emojis)
+            if visualise:
                 print("".join([cell for cell in row_emojis]))
+
+        # Add a small delay to control the refresh rate (optional)
+        # time.sleep(0.1)
+
         return grid
 
     @staticmethod
@@ -289,27 +294,27 @@ class Zoo:
         :return:
         """
         if (
-            self.grid[i][j].__class__ == Water and intensity == "mist"
+                self.grid[i][j].__class__ == Water and intensity == "mist"
         ) and random.choice([True, False]):
             self.grid[i][j].size += random.randint(1, 10)
         if (
-            self.grid[i][j].__class__ == Dirt and intensity == "moderate"
+                self.grid[i][j].__class__ == Dirt and intensity == "moderate"
         ) and random.choice([True, False]):
             self.grid[i][j] = Water()
             self.grid[i][j].position = (i, j)
             self.grid[i][j].size = random.randint(1, 10)
         if (
-            self.grid[i][j].__class__ == Dirt and intensity == "heavy"
+                self.grid[i][j].__class__ == Dirt and intensity == "heavy"
         ) and random.choice([True, False]):
             self.make_puddle(i, j, 50)
         if self.grid[i][j].__class__ == Dirt and intensity == "torrential":
             self.make_puddle(i, j, 75)
         if (
-            self.grid[i][j].__class__ == Grass and intensity == "torrential"
+                self.grid[i][j].__class__ == Grass and intensity == "torrential"
         ) and random.choice([True, False]):
             self.make_puddle(i, j, 20)
         if (
-            self.grid[i][j].__class__ == Water and intensity == "torrential"
+                self.grid[i][j].__class__ == Water and intensity == "torrential"
         ) and random.choice([True, False]):
             self.grid[i][j].size += random.randint(1, 20)
 
@@ -383,20 +388,21 @@ class Zoo:
             if isinstance(tile, Tile):
                 tile = tile.type
 
-            if not issubclass(
-                self.grid[tile.position[0]][tile.position[1]].__class__, Animal
+            # Check if the cell is an instance of an Animal
+            if issubclass(
+                    self.grid[tile.position[0]][tile.position[1]].__class__, Animal
             ):
-                # if it is, replace the tile with the animal
+                # If it is, replace the tile with the animal
                 self.grid[tile.position[0]][tile.position[1]] = tile
             else:
-                # if it isn't, add it to the list of tiles to refresh
+                # If it isn't, add it to the list of tiles to refresh
                 new_tiles_to_refresh.append(tile)
 
-        # remove any None values from self.tiles_to_refresh
+        # Remove any None values from self.tiles_to_refresh
         for tile in tiles_to_remove:
             self.tiles_to_refresh.remove(tile)
 
-        # replace the old list with the new one
+        # Replace the old list with the new one
         self.tiles_to_refresh = new_tiles_to_refresh
 
     def save_instance(self):
@@ -415,9 +421,9 @@ class Zoo:
         # updated_values["id"] = self.id
         list_of_values = [val for val in updated_values.values()]
         if updated_zoo := database.Entity(
-            columns_and_types=columns_to_update,
-            list_of_values=list_of_values,
-            table_name="zoos",
+                columns_and_types=columns_to_update,
+                list_of_values=list_of_values,
+                table_name="zoos",
         ):
             updated_zoo.save(load_id=load_id)
             self.refresh_from_db()
@@ -426,7 +432,7 @@ class Zoo:
             return None
 
 
-def create_zoo(height=5, width=5, options=None, animals=None, plants=None):
+def create_zoo(height=20, width=20, options=None, animals=None, plants=None):
     """
     This function creates the zoo.
     """
@@ -480,7 +486,7 @@ def create_zoo(height=5, width=5, options=None, animals=None, plants=None):
 
 
 def insert_zoos_occupants(
-    animal_instances, dirt_instances, plant_instances, water_instances, zoo
+        animal_instances, dirt_instances, plant_instances, water_instances, zoo
 ):
     db = database.DatabaseConnection()
     for key, value in {
@@ -496,6 +502,7 @@ def insert_zoos_occupants(
 def make_dirt(column, dirt_instances, row, zoo):
     dirt_id = str(uuid.uuid4())
     dirt = Dirt(position=[row, column], home_id=zoo.id, id=dirt_id)
+    dirt.process_image()
     zoo.grid[row][column] = dirt
     tile = environment.grid.Tile(position=[row, column], home_id=zoo.id, _type=dirt)
     zoo.tiles_to_refresh.append(tile)
@@ -506,6 +513,7 @@ def make_water(column, empty_grid_tiles, row, water_instances, water_placed, zoo
     empty_grid_tiles -= 1
     water_id = str(uuid.uuid4())
     water = Water(home_id=zoo.id, position=[row, column], id=water_id)
+    water.process_image()
     zoo.grid[row][column] = water
     water_placed += 1
     tile = environment.grid.Tile(position=[row, column], home_id=zoo.id, _type=water)
@@ -518,6 +526,7 @@ def make_plant(column, empty_grid_tiles, plant_instances, plants, row, zoo):
     empty_grid_tiles -= 1
     plant = random.choice(plants)
     plant = plant(home_id=zoo.id)
+    plant.process_image()
     plant.position = [row, column]
     zoo.grid[row][column] = plant
     tile = environment.grid.Tile(position=[row, column], home_id=zoo.id, _type=plant)
@@ -531,6 +540,7 @@ def make_animal(animal_instances, animals, column, empty_grid_tiles, row, zoo):
         empty_grid_tiles -= 1
         animal = random.choice(animals)
         animal = animal(home_id=zoo.id)
+        animal.process_image()
         animal.position = [row, column]
         zoo.grid[row][column] = animal
         tile = environment.grid.Tile(

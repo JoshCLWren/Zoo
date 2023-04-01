@@ -1,8 +1,9 @@
 import random
 import uuid
+from assets import GameAsset
 
 
-class Water:
+class Water(GameAsset):
     """
     This is the class for water on the map.
     """
@@ -11,6 +12,7 @@ class Water:
         """
         This method is called when the water is created.
         """
+        super().__init__()
         if position is None:
             position = [0, 0]
         self.position = position
@@ -18,3 +20,6 @@ class Water:
         self.emoji = "🌊"
         self.home_id = home_id
         self.id = id
+
+    def __str__(self):
+        return "Water"

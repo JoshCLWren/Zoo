@@ -3,13 +3,13 @@ import itertools
 import logging
 import random
 
-
 import environment.base_elements
 from environment.grid import Tile
 from environment.liquids import Water
 from organisms.dead_things import Corpse
 from organisms.organisms import LifeException, Organism
 from organisms.plants import Bush, Grass, Plant, Tree
+
 
 
 class Animal(Organism): # pylint: disable=too-many-public-methods
@@ -329,15 +329,21 @@ class Animal(Organism): # pylint: disable=too-many-public-methods
         This method is called when the animal takes a turn.
         """
 
-        self.safe_spot = self.look_for_safe_spot()
         self.motivation(turn_number)
-        self.base_hunger()
-        self.base_thirst()
-        self.base_rest()
-        home = environment.buildings.Zoo.load_instance(self.home_id)
-        if not home.full:
+        self.moved_based_on_motive()
+
+    def moved_based_on_motive(self):
+        """
+        This method directs the animals movement based on their motive.
+        """
+        if self.motive == "drink":
+            self.look_for_water()
+        elif self.motive == "eat":
+            self.look_for_food()
+        elif self.motive == "sleep":
+            self.sleep()
+        elif self.motive == "mate":
             self.base_reproduce(turn_number)
-        return self.motive
 
     def base_reproduce(self, turn_number):
         if partner := self.check_for_mating_partner():
@@ -402,7 +408,7 @@ class Animal(Organism): # pylint: disable=too-many-public-methods
     def base_rest(self):
         if self.motive == "sleep":
             if not self.is_at_safe_spot():
-                if safe_spot := self.look_for_safe_spot(self.home.grid):
+                if safe_spot := self.look_for_safe_spot():
                     self.move(safe_spot)
             if self.energy >= self.max_energy // 2:
                 self.sleep()
@@ -436,8 +442,8 @@ class Animal(Organism): # pylint: disable=too-many-public-methods
             func = self.look_for_food
         if self.motive == "eat":
             if found_food := func():
-                self.move(found_food, home)
-                self.eat(found_food, home)
+                self.move(found_food)
+                self.eat(found_food)
             else:
                 # move towards random direction
                 self.move([random.randint(-1, 1), random.randint(-1, 1)])
@@ -539,24 +545,22 @@ class Animal(Organism): # pylint: disable=too-many-public-methods
             self.position[1] = len(home.grid[0]) - 1 - self.speed
 
         try:
-            nearby_safe_spots = [
+            nearby_cells = [
                 home.grid[self.position[0] + i][self.position[1] + j]
                 for i, j in itertools.product(
                     range(-self.speed, self.speed + 1),
                     range(-self.speed, self.speed + 1),
                 )
-                if isinstance(
-                    home.grid[self.position[0] + i][self.position[1] + j],
-                    self.__class__,
-                )
             ]
         except (TypeError, IndexError):
-            nearby_safe_spots = []
+            nearby_cells = []
 
-        if empty_safe_spots := [
-            spot for spot in nearby_safe_spots if not isinstance(spot, Animal)
+        if safe_spots := [
+            cell
+            for cell in nearby_cells
+            if not isinstance(cell, Animal) or not isinstance(cell, self.__class__)
         ]:
-            return min(empty_safe_spots, key=lambda x: x.size)
+            return min(safe_spots, key=lambda x: x.size)
 
         return None
 
@@ -685,15 +689,7 @@ class Predator(Carnivore):
         This method is called when the animal takes a turn.
         """
         self.motivation(turn_number)
-        self.predator_hunger()
-        self.base_thirst()
-        self.base_rest()
-        home = environment.buildings.Zoo.load_instance(self.home_id)
-        home.check_full()
-        if not home.full:
-            self.base_reproduce(turn_number)
-        self.age = turn_number - self.birth_turn
-        return self.motive
+        self.moved_based_on_motive()
 
     def predator_hunger(self):
         """

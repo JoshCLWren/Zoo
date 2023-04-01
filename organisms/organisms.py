@@ -6,11 +6,11 @@ import logging
 from uuid import uuid4
 
 from faker import Faker
-
+from assets import GameAsset
 faker = Faker()
 
 
-class Organism:
+class Organism(GameAsset):
     """
     This is the base class for all organisms.
     """
@@ -19,6 +19,7 @@ class Organism:
         This method is called when an organism is created.
         :param home_id:
         """
+        super().__init__()
         self.id = uuid4() # pylint: disable=invalid-name
         self.is_alive = True
         self.emoji = "🤷"

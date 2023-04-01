@@ -9,6 +9,9 @@ predator or prey since it's random what animal the player is.
 
 import logging
 import sqlite3
+import pygame
+
+
 
 import database
 from environment.base_elements import Dirt
@@ -18,23 +21,40 @@ from environment.liquids import Water
 from organisms.animals import (Animal, Elephant, Giraffe, Hyena, Lion, Rhino,
                                Zebra)
 from organisms.organisms import LifeException
-from organisms.plants import Bush, Grass, Tree
+from organisms.plants import Bush, Grass, Tree, Plant
 
 #pylint: disable=line-too-long
 
 logging.disable(logging.CRITICAL)
+# Define colors
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
 
+# Define grid cell size and margin
+CELL_SIZE = 50
+MARGIN = 5
 
 def main():
     """
     This function is the main function of the game.
     """
+    # Initialize pygame
+    pygame.init()
+
+
     db_connection = database.DatabaseConnection()
     # create the zoo
     try:
         simulate()
     except Exception as e:
         print(e)
+        #print the stack trace
+        import traceback
+        traceback.print_exc()
+
         db_connection.close()
     except KeyboardInterrupt:
         print("Keyboard interrupt, closing database connection")
@@ -52,14 +72,15 @@ def simulate():
         plants=[Bush, Grass, Tree],
     )
 
-    zoo.refresh_grid()
+    zoo.refresh_grid(visualise=False)
     # print the zoo
     turn = 1
     zoo.elapsed_turns = 0
     living_animals = 1
     while living_animals:
         # render the zoo
-
+        simulate_with_pygame(zoo)
+        import pdb; pdb.set_trace()
         # run the simulation
         flat_list = [element for sublist in zoo.grid for element in sublist]
         living_animals = [item for item in flat_list if isinstance(item, Animal)]
@@ -83,8 +104,7 @@ def simulate():
                         dead_things.append(thing)
                         continue
                     zoo = Zoo.load_instance(thing.home_id)
-                    zoo.reprocess_tiles()
-                    zoo.refresh_grid()
+                    simulate_with_pygame(zoo)
                     action = thing.turn(turn_number=turn)
                     if action == "died":
                         dead_things.append(thing)
@@ -95,24 +115,62 @@ def simulate():
         turn += 1
         zoo.elapsed_turns += 1
 
-        # logging.error(f"**********Turn {turn}**********")
-        # logging.error(f"Zoo has {len(zoo.animals)} animals")
-        #
-        # logging.error(f"Zoo has {len(zoo.plants)} plants")
-        # # if len(zoo.plants) > 100:
-        # #     import pdb; pdb.set_trace()
-        # #     pass
-        # logging.error(f"Zoo has {len(zoo.water_sources)} water sources")
-
         zoo.check_full()
-        # logging.error(f"Zoo is {'full' if zoo.full else 'not full'}")
-        # input("Press enter to continue..")
-        # clear the screen
-        # redraw the grid
         print(f"Turn {turn}")
-        zoo.refresh_grid()
+        simulate_with_pygame(zoo)
         zoo = Zoo.load_instance(zoo.id)
-        # input("Press enter to continue..")
+
+def simulate_with_pygame(zoo):
+    grid = zoo.refresh_grid(visualise=False)
+
+    # Set up the display
+    screen = pygame.display.set_mode(
+        ((CELL_SIZE + MARGIN) * len(grid[0]) + MARGIN, (CELL_SIZE + MARGIN) * len(grid) + MARGIN)
+    )
+
+    pygame.display.set_caption("Zoo Simulation")
+
+    # Main pygame loop
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        # Draw grid
+        for row in range(len(grid)):
+            for column in range(len(grid[0])):
+                color = WHITE
+                cell = grid[row][column]
+
+                # Set color based on the type of object
+                if isinstance(cell, Tile):
+                    cell = cell.type
+                if isinstance(cell, (Water, Dirt)):
+                    color = BLUE
+                elif isinstance(cell, Plant):
+                    color = GREEN
+                elif isinstance(cell, Animal):
+                    color = RED
+
+
+                pygame.draw.rect(
+                    screen,
+                    color,
+                    [
+                        (MARGIN + CELL_SIZE) * column + MARGIN,
+                        (MARGIN + CELL_SIZE) * row + MARGIN,
+                        CELL_SIZE,
+                        CELL_SIZE,
+                    ],
+                )
+
+        # Update the screen
+        pygame.display.flip()
+
+    # Quit pygame
+    pygame.quit()
+
 
 
 # run the simulation
