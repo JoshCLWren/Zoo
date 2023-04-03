@@ -60,9 +60,7 @@ for package in env_packages:
         "fancycompleter",
     ):
         os.system(f"pip uninstall {package} -y")
-import pdb
 
-pdb.set_trace()
 # scan each python file for import statements and add them to a list
 import_blocks = []
 dead_imports = []
@@ -138,9 +136,9 @@ for file in python_files:
                     print(f"Removing {line} from {file}")
                     f.write("")
                 else:
-                    f.write(line)
+                    f.write(f"{line}\n")
             else:
-                f.write(line)
+                f.write(f"{line}\n")
 # create a requirements.txt file
 with open(os.path.join(PROJECT_PATH, "requirements.txt"), "w") as f:
     for import_block in final_import_blocks:
