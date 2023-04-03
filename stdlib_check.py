@@ -1,11 +1,13 @@
-import sys
-import pkgutil
 import os
+import pkgutil
+import sys
 import sysconfig
 from pathlib import Path
 
+
 def get_builtin_modules():
     return set(sys.builtin_module_names)
+
 
 def get_c_implemented_modules():
     c_modules = set()
@@ -18,6 +20,7 @@ def get_c_implemented_modules():
             if getattr(module, "__file__", "").endswith(".so"):
                 c_modules.add(module_name)
     return c_modules
+
 
 def get_stdlib_modules():
     stdlib_path = Path(sysconfig.get_path("stdlib"))

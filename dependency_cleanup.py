@@ -3,13 +3,11 @@ This script scans each python file in the project and checks for unused imports.
 """
 
 
-
-
-
+import os
 import re
 import sys
 from typing import List, Tuple
-import os
+
 import stdlib_check
 
 PROJECT_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -48,9 +46,22 @@ with open(os.path.join(PROJECT_PATH, "requirements.txt")) as f:
 
 # use pip to uninstall all packages
 for package in env_packages:
-    if package not in ("pip", "setuptools", "wheel", "pdbpp", "black", "flake8", "isort", "pylint", "pydocstyle", "mypy", "fancycompleter"):
+    if package not in (
+        "pip",
+        "setuptools",
+        "wheel",
+        "pdbpp",
+        "black",
+        "flake8",
+        "isort",
+        "pylint",
+        "pydocstyle",
+        "mypy",
+        "fancycompleter",
+    ):
         os.system(f"pip uninstall {package} -y")
 import pdb
+
 pdb.set_trace()
 # scan each python file for import statements and add them to a list
 import_blocks = []
@@ -62,7 +73,13 @@ for file in python_files:
         # read the file and split it into lines
         lines = f.read().splitlines()
         # find all import statements
-        files_imports.extend([line for line in lines if line.startswith("import") or line.startswith("from")])
+        files_imports.extend(
+            [
+                line
+                for line in lines
+                if line.startswith("import") or line.startswith("from")
+            ]
+        )
     # filter out "import" and from "import" statements
     clean_imports = []
     for line in files_imports:
@@ -86,7 +103,13 @@ for file in python_files:
     valid_imports = list(set(valid_imports))
     if files_imports > valid_imports:
         # if there are unused imports, add them to the dead_imports list
-        dead_imports.extend([import_block for import_block in files_imports if import_block not in valid_imports])
+        dead_imports.extend(
+            [
+                import_block
+                for import_block in files_imports
+                if import_block not in valid_imports
+            ]
+        )
 
     import_blocks.extend(valid_imports)
 # remove duplicates
@@ -122,8 +145,6 @@ for file in python_files:
 with open(os.path.join(PROJECT_PATH, "requirements.txt"), "w") as f:
     for import_block in final_import_blocks:
         f.write(f"{import_block}\n")
-
-
 
 
 os.system("pip install -r requirements.txt")

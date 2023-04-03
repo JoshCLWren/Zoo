@@ -1,17 +1,16 @@
 """
 This module contains the base class for all game assets and image processing.
 """
+import io
 import os
 from pathlib import Path
-import io
+
 import cairosvg
 import emoji
 import qrcode
-from PIL import Image, ImageDraw, ImageFont
-import os
-
 import requests
 from bs4 import BeautifulSoup
+from PIL import Image, ImageDraw, ImageFont
 from PyDictionary import PyDictionary
 
 
@@ -81,7 +80,9 @@ class GameAsset:
                     if not download_success:
                         manual_search_success = False
                         continue
-                still_searching = input("Do you want to search for another emoji? (y/n)")
+                still_searching = input(
+                    "Do you want to search for another emoji? (y/n)"
+                )
                 if still_searching.lower() != "y":
                     return
                 self.url_for_emoji = None
@@ -219,7 +220,9 @@ class GameAsset:
         :return:
         """
         print("Could not find an image for this word.")
-        manual_prompt = input("Do you want to enter an override value to search for? (y/n)")
+        manual_prompt = input(
+            "Do you want to enter an override value to search for? (y/n)"
+        )
         if manual_prompt.lower() == "y":
             manual_query = input("Enter the query to search for: ")
             try:
