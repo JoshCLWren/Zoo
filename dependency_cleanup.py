@@ -21,6 +21,7 @@ def main():
     project = Project()
     project.get_python_files()
     project.get_env_packages(base_requirements.base_requirements)
+    project.get_imports()
     project.filter_imports()
     project.finalize()
     base_requirements.install()
@@ -198,29 +199,28 @@ class Project:
         self.final_import_blocks = list(set(self.final_import_blocks))
 
     def validate_requirements(self):
-        retry_count = 0
+        self.final_import_blocks = list(set(self.final_import_blocks))
         for import_block in self.final_import_blocks:
-            while retry_count < 3:
-                if "." in import_block:
-                    try:
-                        import_block = import_block.split(".")[0]
-                    except Exception as e:
-                        print(f"Failed to remove . from {import_block}: {e}")
-                if (
-                    import_block in self.top_level_python_files
-                    or import_block in self.projects_modules
-                ):
-                    print(
-                        f"Skipping {import_block} as it appears to be a project level import"
-                    )
-                    break
+            if "." in import_block:
+                try:
+                    import_block = import_block.split(".")[0]
+                except Exception as e:
+                    print(f"Failed to remove . from {import_block}: {e}")
+                    continue
+            if (
+                import_block in self.top_level_python_files
+                or import_block in self.projects_modules
+            ):
+                print(
+                    f"Skipping {import_block} as it appears to be a project level import"
+                )
+                continue
 
-                if _exists := self.package_exists_on_pypi(import_block):
-                    print(f"Adding {import_block} to environment")
-                    os.system(f"pip install {import_block}")
+            if _exists := self.package_exists_on_pypi(import_block):
+                print(f"Adding {import_block} to environment")
+                os.system(f"pip install {import_block}")
 
-    @staticmethod
-    def package_exists_on_pypi(package_name, retry_count=0):
+    def package_exists_on_pypi(self, package_name, retry_count=0):
         try:
             pypi = xmlrpc.client.ServerProxy("https://pypi.org/pypi")
             releases = pypi.package_releases(package_name)
@@ -272,14 +272,14 @@ class PythonFile:
         self.dead_imports = []
 
     def introspect(self):
-        with open(self.file) as f:
+        with open(self.file_location) as f:
             # read the file and split it into lines
             self.lines = f.read().splitlines()
             # find all import statements
             self.files_imports.extend(
                 [
                     line
-                    for line in lines
+                    for line in self.lines
                     if line.startswith("import") or line.startswith("from")
                 ]
             )
@@ -292,22 +292,23 @@ class PythonFile:
                 import_line = import_line.split(" ")[1]
 
             self.clean_imports.append(import_line)
-        self.files_imports = list(set(clean_imports))
+        self.files_imports = list(set(self.clean_imports))
         # scan file again and look for references to the imported packages
         with open(self.file_location) as f:
-            files_lines = f.read().splitlines()
-            for line in files_lines:
+            if not self.lines:
+                self.lines = f.read().splitlines()
+            for line in self.lines:
                 # check if the line contains a reference to an imported package
                 self.valid_imports.extend(
                     import_block
-                    for import_block in files_imports
+                    for import_block in self.files_imports
                     if import_block in line
                 )
-        self.files_imports = list(set(files_imports))
+        self.files_imports = list(set(self.files_imports))
         print(
             f"Found {len(self.valid_imports)} valid imports in {self.files_imports} after second scan"
         )
-        valid_imports = list(set(self.valid_imports))
+        self.valid_imports = list(set(self.valid_imports))
         print(
             f"Of the {len(self.files_imports)} imports in {self.file_location}, {len(self.valid_imports)} are referenced in the file"
         )
@@ -317,8 +318,8 @@ class PythonFile:
             self.dead_imports.extend(
                 [
                     import_block
-                    for import_block in files_imports
-                    if import_block not in valid_imports
+                    for import_block in self.files_imports
+                    if import_block not in self.valid_imports
                 ]
             )
 
