@@ -40,7 +40,6 @@ class TestZooEntity:
         assert len(new_zoo_count) == len(zoo_count) + 1
 
     def test_zoo_turn(self, db_connection):
-
         zoo = self.test_zoo()
         db_connection.execute("SELECT * FROM zoos")
         new_zoo_count = db_connection.fetchall()
@@ -67,7 +66,7 @@ class TestZooEntity:
                 turn,
                 turns,
                 zoo,
-                new_zoo_count
+                new_zoo_count,
             )
 
         expected_deviations = 0.5 * turns
@@ -87,7 +86,7 @@ class TestZooEntity:
         turn,
         turns,
         zoo,
-            new_zoo_count
+        new_zoo_count,
     ):
         db_connection = database.DatabaseConnection()
         print(f"Turn {turn} of {turns}.")

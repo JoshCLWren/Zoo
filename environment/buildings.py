@@ -2,11 +2,11 @@ import contextlib
 import datetime
 import io
 import itertools
+import os
 import pickle
+import platform
 import random
 import sqlite3
-import os
-import platform
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -141,8 +141,6 @@ class Zoo:
 
         return "Zoo"
 
-
-
     def refresh_grid(self, visualise=True):
         """
         This method is called when the grid is updated.
@@ -235,7 +233,8 @@ class Zoo:
                 else:
                     current_tile = grid[tile.position[0]][tile.position[1]]
                     current_tile_from_db = database.Entity.load(
-                        id=current_tile.id, table_name=current_tile.__class__.__name__.lower()
+                        id=current_tile.id,
+                        table_name=current_tile.__class__.__name__.lower(),
                     )
                     tile_from_db = database.Entity.load(
                         id=tile.id, table_name=tile.__class__.__name__.lower()
@@ -294,27 +293,27 @@ class Zoo:
         :return:
         """
         if (
-                self.grid[i][j].__class__ == Water and intensity == "mist"
+            self.grid[i][j].__class__ == Water and intensity == "mist"
         ) and random.choice([True, False]):
             self.grid[i][j].size += random.randint(1, 10)
         if (
-                self.grid[i][j].__class__ == Dirt and intensity == "moderate"
+            self.grid[i][j].__class__ == Dirt and intensity == "moderate"
         ) and random.choice([True, False]):
             self.grid[i][j] = Water()
             self.grid[i][j].position = (i, j)
             self.grid[i][j].size = random.randint(1, 10)
         if (
-                self.grid[i][j].__class__ == Dirt and intensity == "heavy"
+            self.grid[i][j].__class__ == Dirt and intensity == "heavy"
         ) and random.choice([True, False]):
             self.make_puddle(i, j, 50)
         if self.grid[i][j].__class__ == Dirt and intensity == "torrential":
             self.make_puddle(i, j, 75)
         if (
-                self.grid[i][j].__class__ == Grass and intensity == "torrential"
+            self.grid[i][j].__class__ == Grass and intensity == "torrential"
         ) and random.choice([True, False]):
             self.make_puddle(i, j, 20)
         if (
-                self.grid[i][j].__class__ == Water and intensity == "torrential"
+            self.grid[i][j].__class__ == Water and intensity == "torrential"
         ) and random.choice([True, False]):
             self.grid[i][j].size += random.randint(1, 20)
 
@@ -390,7 +389,7 @@ class Zoo:
 
             # Check if the cell is an instance of an Animal
             if issubclass(
-                    self.grid[tile.position[0]][tile.position[1]].__class__, Animal
+                self.grid[tile.position[0]][tile.position[1]].__class__, Animal
             ):
                 # If it is, replace the tile with the animal
                 self.grid[tile.position[0]][tile.position[1]] = tile
@@ -421,9 +420,9 @@ class Zoo:
         # updated_values["id"] = self.id
         list_of_values = [val for val in updated_values.values()]
         if updated_zoo := database.Entity(
-                columns_and_types=columns_to_update,
-                list_of_values=list_of_values,
-                table_name="zoos",
+            columns_and_types=columns_to_update,
+            list_of_values=list_of_values,
+            table_name="zoos",
         ):
             updated_zoo.save(load_id=load_id)
             self.refresh_from_db()
@@ -486,7 +485,7 @@ def create_zoo(height=20, width=20, options=None, animals=None, plants=None):
 
 
 def insert_zoos_occupants(
-        animal_instances, dirt_instances, plant_instances, water_instances, zoo
+    animal_instances, dirt_instances, plant_instances, water_instances, zoo
 ):
     db = database.DatabaseConnection()
     for key, value in {

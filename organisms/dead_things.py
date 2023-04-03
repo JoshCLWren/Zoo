@@ -1,5 +1,6 @@
 from assets import GameAsset
 
+
 class Corpse(GameAsset):
     """
     This is the class for dead animals.

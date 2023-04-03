@@ -4,7 +4,10 @@ These are the elements that are not animals or plants or water or buildings.
 """
 
 import uuid
+
 from assets import GameAsset
+
+
 class Dirt(GameAsset):
     """
     This is the class for dirt.

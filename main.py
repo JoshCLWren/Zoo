@@ -9,9 +9,8 @@ predator or prey since it's random what animal the player is.
 
 import logging
 import sqlite3
+
 import pygame
-
-
 
 import database
 from environment.base_elements import Dirt
@@ -21,9 +20,9 @@ from environment.liquids import Water
 from organisms.animals import (Animal, Elephant, Giraffe, Hyena, Lion, Rhino,
                                Zebra)
 from organisms.organisms import LifeException
-from organisms.plants import Bush, Grass, Tree, Plant
+from organisms.plants import Bush, Grass, Plant, Tree
 
-#pylint: disable=line-too-long
+# pylint: disable=line-too-long
 
 logging.disable(logging.CRITICAL)
 # Define colors
@@ -37,6 +36,7 @@ BLUE = (0, 0, 255)
 CELL_SIZE = 50
 MARGIN = 5
 
+
 def main():
     """
     This function is the main function of the game.
@@ -44,15 +44,15 @@ def main():
     # Initialize pygame
     pygame.init()
 
-
     db_connection = database.DatabaseConnection()
     # create the zoo
     try:
         simulate()
     except Exception as e:
         print(e)
-        #print the stack trace
+        # print the stack trace
         import traceback
+
         traceback.print_exc()
 
         db_connection.close()
@@ -80,7 +80,9 @@ def simulate():
     while living_animals:
         # render the zoo
         simulate_with_pygame(zoo)
-        import pdb; pdb.set_trace()
+        import pdb
+
+        pdb.set_trace()
         # run the simulation
         flat_list = [element for sublist in zoo.grid for element in sublist]
         living_animals = [item for item in flat_list if isinstance(item, Animal)]
@@ -120,12 +122,16 @@ def simulate():
         simulate_with_pygame(zoo)
         zoo = Zoo.load_instance(zoo.id)
 
+
 def simulate_with_pygame(zoo):
     grid = zoo.refresh_grid(visualise=False)
 
     # Set up the display
     screen = pygame.display.set_mode(
-        ((CELL_SIZE + MARGIN) * len(grid[0]) + MARGIN, (CELL_SIZE + MARGIN) * len(grid) + MARGIN)
+        (
+            (CELL_SIZE + MARGIN) * len(grid[0]) + MARGIN,
+            (CELL_SIZE + MARGIN) * len(grid) + MARGIN,
+        )
     )
 
     pygame.display.set_caption("Zoo Simulation")
@@ -153,7 +159,6 @@ def simulate_with_pygame(zoo):
                 elif isinstance(cell, Animal):
                     color = RED
 
-
                 pygame.draw.rect(
                     screen,
                     color,
@@ -170,7 +175,6 @@ def simulate_with_pygame(zoo):
 
     # Quit pygame
     pygame.quit()
-
 
 
 # run the simulation

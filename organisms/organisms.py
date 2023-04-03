@@ -6,7 +6,9 @@ import logging
 from uuid import uuid4
 
 from faker import Faker
+
 from assets import GameAsset
+
 faker = Faker()
 
 
@@ -14,13 +16,14 @@ class Organism(GameAsset):
     """
     This is the base class for all organisms.
     """
+
     def __init__(self, home_id):
         """
         This method is called when an organism is created.
         :param home_id:
         """
         super().__init__()
-        self.id = uuid4() # pylint: disable=invalid-name
+        self.id = uuid4()  # pylint: disable=invalid-name
         self.is_alive = True
         self.emoji = "🤷"
         self.name = faker.name()
@@ -48,6 +51,7 @@ class LifeException(Exception):
     """
     This is the base class for all life exceptions.
     """
+
     def __init__(self, animal):
         """
         This method is called when a life exception is created.

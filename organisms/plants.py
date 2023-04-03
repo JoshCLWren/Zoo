@@ -30,7 +30,6 @@ class Plant(Organism):
         self.nearby_unoccupied_tiles = []
         self.birth_turn = 1
 
-
     def grow(self):
         """
         This method is called when the plant grows.

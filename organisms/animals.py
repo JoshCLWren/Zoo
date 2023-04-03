@@ -11,8 +11,7 @@ from organisms.organisms import LifeException, Organism
 from organisms.plants import Bush, Grass, Plant, Tree
 
 
-
-class Animal(Organism): # pylint: disable=too-many-public-methods
+class Animal(Organism):  # pylint: disable=too-many-public-methods
     """
     This is the base class for all animals.
     """
@@ -166,7 +165,7 @@ class Animal(Organism): # pylint: disable=too-many-public-methods
         self.thirst = 0
         self.energy = 0
         self.virility = 0
-        self.is_alive = False # pylint: disable=attribute-defined-outside-init
+        self.is_alive = False  # pylint: disable=attribute-defined-outside-init
         # remove the animal from the home.grid
         home.grid[self.position[0]][self.position[1]] = None
         # remove the animal from the home
@@ -259,6 +258,7 @@ class Animal(Organism): # pylint: disable=too-many-public-methods
         elif reason_not_to_move:
             # logging.error(reason_not_to_move)
             pass
+
     def process_after_move(self, current_occupant):
         """
         This method is called after the animal moves.
@@ -319,7 +319,7 @@ class Animal(Organism): # pylint: disable=too-many-public-methods
         )
         self.look_for_water()
         if self.is_alive != is_alive:
-            self.is_alive = is_alive # pylint: disable=attribute-defined-outside-init
+            self.is_alive = is_alive  # pylint: disable=attribute-defined-outside-init
             if not is_alive:
                 self.die("natural causes")
         return self.is_alive
