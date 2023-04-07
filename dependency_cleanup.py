@@ -2,6 +2,8 @@
 This script scans each python file in the project and checks for unused imports. It then removes them.
 """
 
+import argparse
+import ast
 import os
 import re
 import sys
@@ -16,17 +18,35 @@ def main():
     """
     Main function.
     """
+    parser = argparse.ArgumentParser(
+        description="Clean up unused imports in a Python project."
+    )
+    parser.add_argument(
+        "project_path",
+        metavar="path",
+        type=str,
+        nargs="?",
+        default=os.getcwd(),
+        help="Path to the root of the project (default: current directory)",
+    )
+
+    args = parser.parse_args()
+
+    project_path = os.path.abspath(args.project_path)
 
     base_requirements = BaseRequirements(default=True)
-    project = Project()
+    project = Project(project_path=project_path)
+    # project.install_requirements()
     project.get_python_files()
-    project.get_env_packages(base_requirements.base_requirements)
+    # project.get_env_packages(base_requirements.base_requirements)
     project.get_imports()
     project.filter_imports()
+    project.remove_dead_imports()
     project.finalize()
-    base_requirements.install()
+    # base_requirements.install()
     project.validate_requirements()
     project.cleanup()
+    project.install_requirements(file="temp_requirements.txt")
 
 
 class BaseRequirements:
@@ -77,11 +97,11 @@ class Project:
     Project level attributes and methods.
     """
 
-    def __init__(self):
-        self.PROJECT_PATH = os.path.dirname(os.path.abspath(__file__))
+    def __init__(self, project_path=None):
+        self.PROJECT_PATH = project_path or os.path.dirname(os.path.abspath(__file__))
         print(self.PROJECT_PATH)
         # start by installing the requirements
-        os.system("pip install -r requirements.txt")
+
         print("Installed requirements")
         # List of files to ignore
         self.IGNORE_FILES = ["dependency_cleanup.py", "stdlib_check.py"]
@@ -104,17 +124,26 @@ class Project:
         self.top_level_python_files = []
         self.projects_modules = []
 
+    @staticmethod
+    def install_requirements(file="requirements.txt"):
+        # install the requirements
+        os.system(f"pip install -r {file}")
+        print("Installed requirements")
+
     def get_python_files(self):
         # Walk through the project directory and find all python files
+        py_files = []
         for root, dirs, files in os.walk(self.PROJECT_PATH):
             # Remove ignored directories from the list
             dirs[:] = [d for d in dirs if d not in self.IGNORE_DIRS]
-            self.python_files.extend(
+            py_files.extend(
                 os.path.join(root, file)
                 for file in files
                 if file.endswith(".py") and file not in self.IGNORE_FILES
             )
-
+        # instantiate each python file as PythonFile object and add it to a list
+        for file in py_files:
+            self.python_files.append(PythonFile(file))
         print(f"Found {len(self.python_files)} python files")
 
     def get_env_packages(self, base_requirements):
@@ -129,41 +158,29 @@ class Project:
         print(f"Found and installed {len(self.env_packages)} packages")
         # use pip to uninstall all packages
         for package in self.env_packages:
-            if package not in (base_requirements):
+            if package not in base_requirements:
                 os.system(f"pip uninstall {package} -y")
         print("temporarily installed packages have been uninstalled")
 
     def get_imports(self):
         # scan each python file for import statements and add them to a list
         for file in self.python_files:
-            python_file = PythonFile(file)
             print(f"Scanning {file} for imports")
-            python_file.introspect()
-            print(
-                f"Found {len(python_file.files_imports)} imports in {python_file.file_location}"
-            )
-            self.import_blocks.extend(python_file.valid_imports)
-            self.dead_imports.extend(python_file.dead_imports)
-            python_file.remove_unused_imports(self.dead_imports)
+            file.introspect()
+            print(f"Found {len(file.imports)} imports in {file.file_location}")
+            self.import_blocks.extend(file.imports)
+
         # remove duplicates
         self.import_blocks = list(set(self.import_blocks))
         print(f"Found {len(self.import_blocks)} used imports in all files")
-        dead_imports = list(set(self.dead_imports))
-        print(f"Found {len(dead_imports)} unused imports in all files")
+        self.dead_imports = list(set(self.dead_imports))
+        print(f"Found {len(self.dead_imports)} unused imports in all files")
 
     def filter_imports(self):
-        python_std_libraries = stdlib_check.get_stdlib_modules()
-        c_libraries = stdlib_check.get_c_implemented_modules()
-        builtin_libraries = stdlib_check.get_builtin_modules()
-        self.skipped_libraries = [
-            lib for lib in c_libraries if lib in self.import_blocks
-        ]
-        self.skipped_libraries.extend(
-            lib for lib in builtin_libraries if lib in self.import_blocks
-        )
-        self.skipped_libraries.extend(
-            lib for lib in python_std_libraries if lib in self.import_blocks
-        )
+        breakpoint()
+        self.skipped_libraries = stdlib_check.Builtins().get(self.import_blocks)
+
+
         print(f"Found {len(self.skipped_libraries)} python standard libraries")
         self.possible_project_level_libraries = [
             file[:-3] for file in self.IGNORE_FILES
@@ -171,7 +188,8 @@ class Project:
         print(
             f"Found {len(self.possible_project_level_libraries)} possible project level libraries"
         )
-        self.skipped_libraries.extend(self.possible_project_level_libraries)
+        self.skipped_libraries = list(set(self.skipped_libraries))
+        self.skipped_libraries.extend(list(self.possible_project_level_libraries))
         self.final_import_blocks = [
             import_block
             for import_block in self.import_blocks
@@ -188,6 +206,10 @@ class Project:
                 print(
                     f"Removing {import_block} from dead imports as it appears to be a project level import"
                 )
+
+    def remove_dead_imports(self):
+        for file in self.python_files:
+            file.remove_unused_imports(self.final_dead_imports)
 
     def finalize(self):
         self.top_level_python_files = [
@@ -217,8 +239,9 @@ class Project:
                 continue
 
             if _exists := self.package_exists_on_pypi(import_block):
-                print(f"Adding {import_block} to environment")
-                os.system(f"pip install {import_block}")
+                print(f"Adding {import_block} to temporary requirements.txt file")
+                with open("temp_requirements.txt", "a") as f:
+                    f.write(f"{import_block}")
 
     def package_exists_on_pypi(self, package_name, retry_count=0):
         try:
@@ -246,11 +269,18 @@ class Project:
 
     @staticmethod
     def cleanup(lint=True):
-        print("Compiling requirements.txt")
+        print("Compiling new requirements.txt")
+        if os.path.exists("temp_requirements.txt"):
+            # overwrite requirements.txt with temp_requirements.txt
+            print("Overwriting requirements.txt with temp_requirements.txt")
+            os.system("mv temp_requirements.txt requirements.txt")
+        else:
+            os.system("pip freeze > requirements.txt")
+
         os.system("pip install pip --upgrade")
         if lint:
             os.system("pip install black isort")
-        os.system("pip freeze > requirements.txt")
+
         if lint:
             print("Running black and isort")
             os.system("black .")
@@ -264,7 +294,7 @@ class PythonFile:
     """
 
     def __init__(self, file):
-        self.files_imports = []
+        self.imports = []
         self.valid_imports = []
         self.file_location = file
         self.lines = []
@@ -272,74 +302,65 @@ class PythonFile:
         self.dead_imports = []
 
     def introspect(self):
-        with open(self.file_location) as f:
-            # read the file and split it into lines
-            self.lines = f.read().splitlines()
-            # find all import statements
-            self.files_imports.extend(
-                [
-                    line
-                    for line in self.lines
-                    if line.startswith("import") or line.startswith("from")
-                ]
-            )
-            # filter out "import" and from "import" statements
+        with open(self.file_location, "r") as file:
+            tree = ast.parse(file.read())
 
-        for import_line in self.files_imports:
-            if " " in import_line and "import" in import_line:
-                # for import statements, remove the "import" part and keep the package name
-                # for from import statements, remove the "from" part and keep the package name
-                import_line = import_line.split(" ")[1]
-
-            self.clean_imports.append(import_line)
-        self.files_imports = list(set(self.clean_imports))
-        # scan file again and look for references to the imported packages
-        with open(self.file_location) as f:
-            if not self.lines:
-                self.lines = f.read().splitlines()
-            for line in self.lines:
-                # check if the line contains a reference to an imported package
-                self.valid_imports.extend(
-                    import_block
-                    for import_block in self.files_imports
-                    if import_block in line
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    if isinstance(node, ast.Import):
+                        self.imports.append(alias.name)
+                    elif isinstance(node, ast.ImportFrom):
+                        module = node.module
+                        if module is not None:
+                            self.imports.append(module)
+        # now scan the file for usage of the imports and add them to valid_imports
+        mutations_of_imports = []
+        for import_ in self.imports:
+            if "." in import_:
+                mutations_of_imports.extend(
+                    (import_.split(".")[0], import_.split(".")[1])
                 )
-        self.files_imports = list(set(self.files_imports))
-        print(
-            f"Found {len(self.valid_imports)} valid imports in {self.files_imports} after second scan"
-        )
-        self.valid_imports = list(set(self.valid_imports))
-        print(
-            f"Of the {len(self.files_imports)} imports in {self.file_location}, {len(self.valid_imports)} are referenced in the file"
-        )
-        if self.files_imports > self.valid_imports:
-            print(f"There are unused imports in {self.file_location}")
-            # if there are unused imports, add them to the dead_imports list
-            self.dead_imports.extend(
-                [
-                    import_block
-                    for import_block in self.files_imports
-                    if import_block not in self.valid_imports
-                ]
-            )
+        with open(self.file_location) as f:
+            lines = f.read().splitlines()
+        for line in lines:
+            for partial_import in mutations_of_imports:
+                if partial_import in line:
+                    # find the import that matches this line
+                    for full_import in self.imports:
+                        if partial_import in full_import:
+                            self.valid_imports.append(full_import)
+                            break
+        self.dead_imports = list(set(self.imports) - set(self.valid_imports))
 
     def remove_unused_imports(self, final_dead_imports):
         print(f"Removing unused imports from {self.file_location}")
-        if not self.lines:
-            with open(self.file_location) as f:
-                self.lines = f.read().splitlines()
-        with open(self.file_location, "w") as f:
-            for line in self.lines:
-                # check if the line is an import statement
-                if line.startswith("import") or line.startswith("from"):
-                    # check if the line is in the dead_imports list remove if from the file
+        with open(self.file_location) as f:
+            lines = f.read().splitlines()
+        backup_lines = lines.copy()
+        new_lines = []
+
+        for node in ast.walk(ast.parse("\n".join(lines))):
+            if isinstance(node, (ast.Import, ast.ImportFrom)) and (
+                not new_lines or new_lines[-1] != lines[node.lineno - 1]
+            ):
+                new_lines.append(lines[node.lineno - 1])
+        file_changes = False
+        try:
+            with open(self.file_location, "w") as f:
+                for line in lines:
                     if line in final_dead_imports:
-                        print(f"Removing '{line}' from {self.file_location}")
-                        f.write("\n")
-                    else:
+                        file_changes = True
+                    if line not in final_dead_imports or line in new_lines:
                         f.write(f"{line}\n")
-                else:
+        except Exception as e:
+            print(f"Failed to remove unused imports from {self.file_location}: {e}")
+            with open(self.file_location, "w") as f:
+                for line in backup_lines:
                     f.write(f"{line}\n")
+
+        if file_changes:
+            print(f"Removed unused imports from {self.file_location}")
 
 
 if __name__ == "__main__":
