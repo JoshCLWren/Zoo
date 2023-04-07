@@ -27,7 +27,7 @@ def custom_print(*args, **kwargs):
         builtins.print(*args, **kwargs)
 
 
-def install_pip():
+def install_pip(args):
     """
     Install pip if it is not found.
     """
@@ -36,24 +36,30 @@ def install_pip():
     except ImportError:
         custom_print("pip not found. Installing pip...")
         try:
-            subprocess.check_call([sys.executable, "-m", "ensurepip", "--default-pip"])
+            cmd = [sys.executable, "-m", "ensurepip", "--default-pip"]
+            if args.silent:
+                cmd.append("--quiet")
+            subprocess.check_call(cmd)
         except subprocess.CalledProcessError:
             custom_print("Failed to install pip through ensurepip.")
             custom_print("Installing pip through get-pip.py...")
             try:
-                install_pip_urllib()
+                install_pip_urllib(args)
             except Exception as e:
                 custom_print(f"Failed to install pip. Error: {e}")
                 sys.exit(1)
 
 
-def install_pip_urllib():
+def install_pip_urllib(args):
     import urllib.request
 
     url = "https://bootstrap.pypa.io/get-pip.py"
     file_name = "get-pip.py"
     urllib.request.urlretrieve(url, file_name)
-    subprocess.check_call([sys.executable, file_name])
+    cmd = [sys.executable, file_name]
+    if args.silent:
+        cmd.append("--quiet")
+    subprocess.check_call(cmd)
     os.remove(file_name)
     custom_print("pip installed successfully.")
 
@@ -63,23 +69,24 @@ def main(args):
     Main function.
     """
     project_path = args.project_path or os.getcwd()
-    install_pip()
+
     startup_log = "Starting dependency_cleanup..."
     global verbose_output
     verbose_output = verbose_output = not args.silent
     custom_print(startup_log)
+    install_pip(args)
     requirements = Requirements(default=True)
-    requirements.check_env_packages()
+    requirements.check_env_packages(args)
 
     project = Project(project_path=project_path)
-    requirements.install(scan_project=True)
+    requirements.install(args, scan_project=True)
     project.get_python_files()
     project.get_imports()
     project.filter_imports(requirements)
     project.remove_dead_imports()
     project.validate_requirements(requirements)
-    requirements.remove_unused_requirements()
-    requirements.install(scan_project=False)
+    requirements.remove_unused_requirements(args)
+    requirements.install(args, scan_project=False)
 
 
 class Requirements:
@@ -124,7 +131,7 @@ class Requirements:
             if user_base_requirements != "y":
                 self.base_requirements = None
 
-    def remove_unused_requirements(self):
+    def remove_unused_requirements(self, args):
         """
         Remove any unused requirements from the environment.
         """
@@ -133,11 +140,16 @@ class Requirements:
             removed_requirements = "removed_requirements.txt"
             with open(removed_requirements, "w") as f:
                 for package in self.packages_to_remove:
-                    f.write(f"{package}\r")
-            os.system(f"pip uninstall -r {removed_requirements} -y")
+                    if package in self.requirements_installed:
+                        f.write(f"{package}\r")
+
+            cmd = f"pip uninstall -r {removed_requirements} -y"
+            if args.silent:
+                cmd += " -q"
+            os.system(cmd)
             os.remove(removed_requirements)
 
-    def install(self, scan_project=False):
+    def install(self, args, scan_project=False):
         """
         Install the base requirements for this project and compile a list of requirements.txt
         :return:
@@ -147,7 +159,7 @@ class Requirements:
         if self.packages_to_install:
             custom_print("Installing base requirements...")
             # create a temporary requirements file
-            self.install_missing()
+            self.install_missing(args)
         self.create_requirements_file(scan_project=scan_project)
 
     def create_requirements_file(
@@ -200,7 +212,7 @@ class Requirements:
             for package in requirements_set:
                 f.write(f"{package}\r")
 
-    def install_missing(self):
+    def install_missing(self, args):
         """
         Install the missing packages.
         Creates a temporary requirements file and installs the packages from it.
@@ -212,13 +224,19 @@ class Requirements:
         with open(self.temp_requirements_file, "w") as f:
             for package in self.packages_to_install:
                 f.write(f"{package}\r")
+        cmd = f"{sys.executable} -m pip install -r {self.temp_requirements_file}"
 
-        os.system(f"{sys.executable} -m pip install -r {self.temp_requirements_file}")
+        if args.silent:
+            cmd += " -q"
+        os.system(cmd)
         os.remove(self.temp_requirements_file)
         custom_print("Base requirements installed successfully.")
 
-    def check_env_packages(self):
-        env_packages = subprocess.check_output([sys.executable, "-m", "pip", "freeze"])
+    def check_env_packages(self, args):
+        cmd = [sys.executable, "-m", "pip", "freeze"]
+        if args.silent:
+            cmd.append("-q")
+        env_packages = subprocess.check_output(cmd)
         env_packages = env_packages.decode("utf-8").splitlines()
         packages_to_install = []
         for package in env_packages:
