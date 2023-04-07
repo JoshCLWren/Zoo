@@ -1,10 +1,12 @@
 aiohttp
 aiosignal
+arrow
 astroid
 async-timeout
 attrs
 beautifulsoup4
 black
+bs4
 cairocffi
 certifi
 cffi
@@ -13,7 +15,6 @@ click
 cssselect2
 defusedxml
 dill
-emoji
 Faker
 fancycompleter
 flake8
@@ -39,6 +40,7 @@ platformdirs
 pluggy
 pycodestyle
 pycparser
+PyDictionary
 pydocstyle
 pyflakes
 pygame

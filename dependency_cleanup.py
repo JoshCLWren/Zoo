@@ -83,6 +83,7 @@ def main(args):
     project.get_python_files()
     project.get_imports()
     project.filter_imports(requirements)
+    assert "PyDictionary" not in project.final_dead_imports
     project.remove_dead_imports()
     project.validate_requirements(requirements)
     requirements.remove_unused_requirements(args)
@@ -314,6 +315,7 @@ class Project:
         custom_print(f"Found {len(self.dead_imports)} unused imports in all files")
 
     def filter_imports(self, requirements_instance):
+        assert "PyDictionary" not in self.final_dead_imports
         self.import_blocks = [
             import_block.split(".")[0] for import_block in self.import_blocks
         ]
@@ -336,6 +338,7 @@ class Project:
         custom_print(
             f"After removing python standard libraries and project imports, {len(self.final_import_blocks)} imports remain"
         )
+        assert "PyDictionary" not in self.final_dead_imports
         # check dead_imports for any imports that are possible_project_level_libraries
         for import_block in self.dead_imports:
             if (
@@ -350,7 +353,8 @@ class Project:
                 custom_print(
                     f"Removing {import_block} from dead imports as it appears to be a project level import"
                 )
-
+        assert "PyDictionary" not in self.final_dead_imports
+        assert "PyDictionary" not in self.final_dead_imports
         self.top_level_python_files = [
             file[:-3] for file in os.listdir(self.PROJECT_PATH) if file.endswith(".py")
         ]
@@ -366,11 +370,14 @@ class Project:
                and lib not in self.top_level_python_files
                and lib not in self.projects_modules
         ]
+        assert "PyDictionary" not in self.final_dead_imports
         self.final_import_blocks = list(set(self.final_import_blocks))
         for import_block in self.final_dead_imports:
             requirements_instance.packages_to_remove.append(import_block)
+        assert "PyDictionary" not in self.final_dead_imports
 
     def remove_dead_imports(self):
+        assert "PyDictionary" not in self.final_dead_imports
         for file in self.python_files:
             file.remove_unused_imports(self.final_dead_imports)
 
@@ -451,63 +458,134 @@ class PythonFile:
         self.dead_imports = []
 
     def introspect(self):
+        """
+        Introspect the file and find all imports and separate them into valid and invalid imports
+        valid imports are imports that are used in the file
+        dead imports are imports that are not used in the file beyond the import statement
+        :return:
+        """
         with open(self.file_location, "r") as file:
             tree = ast.parse(file.read())
+
+        imported_names = set()
 
         for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 for alias in node.names:
                     if isinstance(node, ast.Import):
-                        self.imports.append(alias.name)
+                        imported_name = alias.name
                     elif isinstance(node, ast.ImportFrom):
-                        module = node.module
-                        if module is not None:
-                            self.imports.append(module)
-        # now scan the file for usage of the imports and add them to valid_imports
-        mutations_of_imports = []
+                        imported_name = alias.name if node.module is None else f"{node.module}.{alias.name}"
+                    self.imports.append(imported_name)
+                    imported_names.add(alias.name)
+
+        class UsageVisitor(ast.NodeVisitor):
+            def __init__(self, imported_names):
+                self.imported_names = imported_names
+                self.used_names = set()
+
+            def visit_Name(self, node):
+                if node.id in self.imported_names:
+                    self.used_names.add(node.id)
+
+        visitor = UsageVisitor(imported_names)
+        visitor.visit(tree)
+
+        self.valid_imports = list(visitor.used_names)
+
+        # Consider an import valid if its root is in valid_imports
+        def is_valid_import(import_):
+            if "." not in import_:
+                return import_ in self.valid_imports
+            root = import_.split(".")[0]
+            return root in self.valid_imports
+
         for import_ in self.imports:
+            if is_valid_import(import_):
+                self.valid_imports.append(import_)
+            else:
+                split_import = import_.split(".")
+                index_one = split_import[0]
+                try:
+                    index_two = split_import[1]
+                except IndexError:
+                    index_two = None
+
+                if is_valid_import(index_one) and index_one not in self.valid_imports:
+                    self.valid_imports.append(index_one)
+                    continue
+                if not index_two:
+                    self.dead_imports.extend([import_, index_one])
+                    continue
+                elif is_valid_import(index_two) and index_two not in self.valid_imports:
+                    self.valid_imports.append(index_two)
+                    continue
+                else:
+                    self.dead_imports.extend([import_, index_one, index_two])
+        valid_import_copy = self.valid_imports.copy()
+        for module in valid_import_copy:
+            if "." in module:
+                self.valid_imports.append(module.split(".")[0])
+                self.valid_imports.append(module.split(".")[1])
+                self.valid_imports.append(module)
+        self.valid_imports = list(set(self.valid_imports))
+        self.dead_imports = list(set(self.dead_imports))
+        dead_import_copy = self.dead_imports.copy()
+        # add any varations of imports to self.valid_imports i.e; 'bs4.BeautifulSoup' would have 3 entries in self.valid_imports
+        # 'bs4', 'BeautifulSoup', 'bs4.BeautifulSoup'
+        for import_ in dead_import_copy:
             if "." in import_:
-                mutations_of_imports.extend(
-                    (import_.split(".")[0], import_.split(".")[1])
-                )
-        with open(self.file_location) as f:
-            lines = f.read().splitlines()
-        for line in lines:
-            if "import" in line:
-                continue
-            if not self.imports:
-                break
-            # split the line into tokens divided by spaces and periods
-            tokens = re.split(r"[\s.]", line)
-            for token in tokens:
-                if token in self.imports or token in mutations_of_imports:
-                    self.valid_imports.append(token)
-        for import_ in self.imports:
-            if import_ not in self.valid_imports:
-                self.dead_imports.append(import_)
-        if "assets" in self.file_location:
-            assert "cairosvg" not in self.valid_imports
-            assert "cairosvg" in self.dead_imports
+                if import_.split(".")[0] in self.valid_imports:
+                    print(import_)
+                    self.dead_imports.remove(import_)
+                    self.valid_imports.append(import_)
+                    self.valid_imports.append(import_.split(".")[0])
+                    if len(import_.split(".")) > 2:
+                        self.dead_imports.append(import_.split(".")[1])
+                    continue
+                if import_.split(".")[1] in self.valid_imports:
+                    print(import_)
+                    self.dead_imports.remove(import_)
+                    self.valid_imports.append(import_)
+                    self.valid_imports.append(import_.split(".")[1])
+                    if len(import_.split(".")) > 2:
+                        self.dead_imports.append(import_.split(".")[0])
+                    continue
+            else:
+                if import_ in self.valid_imports:
+                    print(import_)
+                    self.dead_imports.remove(import_)
+                    self.valid_imports.append(import_)
+        self.dead_imports = list(set(self.dead_imports))
+        assert "PyDictionary" not in self.dead_imports
+
 
     def remove_unused_imports(self, final_dead_imports):
+        """
+        Removes unused imports from the file
+        :param final_dead_imports: a list of imports that are unused in the entire project
+        :return:
+        """
+        assert "PyDictionary" not in final_dead_imports
         custom_print(f"Removing unused imports from {self.file_location}")
         with open(self.file_location) as f:
             lines = f.read().splitlines()
         backup_lines = lines.copy()
-        new_lines = []
 
+        new_lines = []
         for node in ast.walk(ast.parse("\n".join(lines))):
             if isinstance(node, (ast.Import, ast.ImportFrom)) and (
                     not new_lines or new_lines[-1] != lines[node.lineno - 1]
             ):
                 new_lines.append(lines[node.lineno - 1])
+
         file_changes = False
         try:
             with open(self.file_location, "w") as f:
                 for line in lines:
                     if line in final_dead_imports:
                         file_changes = True
-                    if line not in final_dead_imports or line in new_lines:
+                    if line not in final_dead_imports or line not in new_lines:
                         f.write(f"{line}\n")
         except Exception as e:
             custom_print(f"Failed to remove unused imports from {self.file_location}: {e}")
