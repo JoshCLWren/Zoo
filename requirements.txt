@@ -1,1 +1,11 @@
-openaiuuidrequestsPyDictionarybs4dataclassesPILPILpytestcairosvgpathlibunittestfakerpygamepandasqrcodePILdataclassestimearrow
+pygame
+pandas
+pytest
+arrow
+beautifulsoup4
+qrcode
+PyDictionary
+cairosvg
+openai
+Pillow
+faker

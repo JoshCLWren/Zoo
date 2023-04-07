@@ -45,8 +45,8 @@ def main():
     project.finalize()
     # base_requirements.install()
     project.validate_requirements()
-    project.cleanup()
-    project.install_requirements(file="temp_requirements.txt")
+    project.cleanup(base_requirements.base_requirements)
+    project.install_requirements()
 
 
 class BaseRequirements:
@@ -177,9 +177,10 @@ class Project:
         print(f"Found {len(self.dead_imports)} unused imports in all files")
 
     def filter_imports(self):
-        breakpoint()
+        self.import_blocks = [
+            import_block.split(".")[0] for import_block in self.import_blocks
+        ]
         self.skipped_libraries = stdlib_check.Builtins().get(self.import_blocks)
-
 
         print(f"Found {len(self.skipped_libraries)} python standard libraries")
         self.possible_project_level_libraries = [
@@ -237,19 +238,29 @@ class Project:
                     f"Skipping {import_block} as it appears to be a project level import"
                 )
                 continue
-
-            if _exists := self.package_exists_on_pypi(import_block):
-                print(f"Adding {import_block} to temporary requirements.txt file")
+            if package := self.package_exists_on_pypi(import_block):
+                print(f"Adding {package} to temporary requirements.txt file")
                 with open("temp_requirements.txt", "a") as f:
-                    f.write(f"{import_block}")
+                    f.write(f"{package}\n")
 
     def package_exists_on_pypi(self, package_name, retry_count=0):
+        pypi_package_aliases = {
+            "PIL": "Pillow",
+            "pytz": "tzlocal",
+            "bs4": "beautifulsoup4",
+        }
+        if package_name in pypi_package_aliases:
+            self.import_blocks = [
+                module for module in self.import_blocks if module != package_name
+            ]
+            package_name = pypi_package_aliases[package_name]
+            self.import_blocks.append(package_name)
         try:
             pypi = xmlrpc.client.ServerProxy("https://pypi.org/pypi")
             releases = pypi.package_releases(package_name)
             if len(releases) > 0:
                 print(f"Package {package_name} exists on PyPI")
-                return True
+                return package_name
             else:
                 print(f"Package {package_name} does not exist on PyPI")
                 return False
@@ -259,17 +270,35 @@ class Project:
             )
             if "TooManyRequests" in e.faultString:
                 e_list = e.faultString.split(" ")
-                index_of_seconds = e_list.index("seconds.")
-                seconds = int(e_list[index_of_seconds - 1])
-                print(f"Sleeping for {seconds} seconds")
-                time.sleep(seconds + 1)
+                try:
+                    index_of_seconds = e_list.index("seconds.")
+                    seconds = int(e_list[index_of_seconds - 1])
+                    print(f"Sleeping for {seconds} seconds")
+                    self.countdown(seconds)
+                except ValueError:
+                    print("Failed to parse faultString, sleeping for 10 seconds")
+                    self.countdown(11)
             retry_count += 1
             if retry_count < 3:
                 return self.package_exists_on_pypi(package_name, retry_count)
 
     @staticmethod
-    def cleanup(lint=True):
+    def countdown(seconds):
+        seconds += 1
+        for index, second in enumerate(range(seconds)):
+            if index not in [0, 1]:
+                # count down from seconds to 0
+                print("\033[F")
+                print(f"{seconds - index} seconds remaining")
+                # clear the line above
+            time.sleep(1)
+
+    @staticmethod
+    def cleanup(base_requirements=None, lint=True):
         print("Compiling new requirements.txt")
+        if base_requirements:
+            print(f"Adding {base_requirements} to requirements.txt")
+            os.system(f"cat {base_requirements} >> requirements.txt")
         if os.path.exists("temp_requirements.txt"):
             # overwrite requirements.txt with temp_requirements.txt
             print("Overwriting requirements.txt with temp_requirements.txt")

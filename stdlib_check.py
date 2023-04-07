@@ -1,9 +1,9 @@
+import json
 import os
 import pkgutil
 import sys
 import sysconfig
 from pathlib import Path
-import json
 
 
 def remove_leading_underscore(module):
@@ -19,8 +19,13 @@ class Builtins:
         self.use_cache = True
         self.modules = set()
         self.cache_path = "cache/builtins.json"
-        self.cache_dict = {"builtin_modules": [], "c_implemented_modules": [], "stdlib_modules": [],
-                           "python_system_files": [], "modules": []}
+        self.cache_dict = {
+            "builtin_modules": [],
+            "c_implemented_modules": [],
+            "stdlib_modules": [],
+            "python_system_files": [],
+            "modules": [],
+        }
 
     def builtin_modules(self):
         name = "builtin_modules"
@@ -110,9 +115,15 @@ class Builtins:
             if output:
                 self.modules = output
                 return output
-        output = self.builtin_modules() + self.c_implemented_modules() + self.stdlib_modules() + self.python_system_files()
+        output = (
+            self.builtin_modules()
+            + self.c_implemented_modules()
+            + self.stdlib_modules()
+            + self.python_system_files()
+        )
         self.modules = self.cache_output(output, name)
         return self.modules
+
     def check_if_cached(self, obj):
         """
         Check if the module is cached.
