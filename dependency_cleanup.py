@@ -352,9 +352,11 @@ class Project:
                     and import_block.split(" ")[1]
                     not in self.possible_project_level_libraries
             ):
-                self.final_dead_imports.append(import_line)
+                if import_line not in self.final_dead_imports:
+                    self.final_dead_imports.append(import_line)
             if import_block not in self.possible_project_level_libraries:
-                self.final_dead_imports.append(import_line)
+                if import_line not in self.final_dead_imports:
+                    self.final_dead_imports.append(import_line)
             else:
                 custom_print(
                     f"Removing {import_block} from dead imports as it appears to be a project level import"
