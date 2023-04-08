@@ -118,6 +118,44 @@ class TestImportCleaner(unittest.TestCase):
 
         self.assertEqual(content, "if 1 in [1, 2, 3]:\n    print('Hello World')\n")
 
+    def test_doc_string(self):
+        """
+        In the event a doc string is present, we should not add import statements at the top of the file
+        but rather below the doc string
+        :return:
+        """
+        with open(self.file_location, "w") as f:
+            f.write(
+                '"""\n'
+                "This is a doc string\n"
+                '"""\n'
+                "from pytorch3d.renderer import (\n"
+                "    look_at_view_transform,\n"
+                "    FoVPerspectiveCameras,\n"
+                "    PointLights,\n"
+                "    RasterizationSettings,\n"
+                ")\n"
+                "FoVPerspectiveCameras()\n"
+                "print('Hello World')\n"
+            )
+        dead_imports = ["look_at_view_transform"]
+        python_file = dependency_cleanup.PythonFile(self.file_location)
+        python_file.introspect()
+        python_file.remove_unused_imports(dead_imports)
+        with open(self.file_location, "r") as f:
+            content = f.read()
+
+        self.assertEqual(
+            content,
+            '"""\n'
+            "This is a doc string\n"
+            '"""\n'
+            "from pytorch3d.renderer import FoVPerspectiveCameras\n"
+            "FoVPerspectiveCameras()\n"
+            "print('Hello World')\n",
+        )
+
+
 
 if __name__ == "__main__":
     unittest.main()

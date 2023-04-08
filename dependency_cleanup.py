@@ -604,8 +604,20 @@ class PythonFile:
                 else:
                     new_import_statement = f"{new_import_statement}\n"
                 # check the last word of the import statement if its "in" or "as" then remove it then do not add a new line
+                index_to_insert = 0
+                # if the file has a docstring then insert the new import statement after the docstring
+                if new_lines_copy[0].startswith('"""'):
+                    # find the end of the docstring
+                    triple_quote_count = 0
+                    for index, line in enumerate(new_lines_copy):
+                        if '"""' in line:
+                            triple_quote_count += 1
+                        if triple_quote_count == 2:
+                            index_to_insert = index + 1 # insert after the docstring
+                            break
+
                 if new_import_statement.split(" ")[-1] not in ["in\n", "as\n"]:
-                    new_lines_copy.insert(0, new_import_statement)
+                    new_lines_copy.insert(index_to_insert, new_import_statement)
                     new_lines = new_lines_copy
         file_changes = "".join(lines) != "".join(new_lines)
         try:
