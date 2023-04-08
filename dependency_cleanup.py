@@ -512,21 +512,29 @@ class PythonFile:
             lines = f.read().splitlines()
         backup_lines = lines.copy()
 
-        new_lines = []
-        for node in ast.walk(ast.parse("\n".join(lines))):
-            if isinstance(node, (ast.Import, ast.ImportFrom)) and (
-                    not new_lines or new_lines[-1] != lines[node.lineno - 1]
-            ):
-                new_lines.append(lines[node.lineno - 1])
+        def is_dead_import(line):
+            for dead_import in final_dead_imports:
+                if dead_import in line and "import" in line:
+                    return True
+            return False
 
         file_changes = False
         try:
             with open(self.file_location, "w") as f:
+                multiline_import = False
                 for line in lines:
-                    if any(dead_import in line for dead_import in final_dead_imports):
-                        file_changes = True
-                    else:
+                    if multiline_import:
+                        if ")" in line:
+                            multiline_import = False
+                        if not is_dead_import(line):
+                            f.write(f"{line}\n")
+                    elif not is_dead_import(line):
                         f.write(f"{line}\n")
+                    else:
+                        file_changes = True
+
+                    if "(" in line and "import" in line:
+                        multiline_import = True
         except Exception as e:
             custom_print(f"Failed to remove unused imports from {self.file_location}: {e}")
             with open(self.file_location, "w") as f:
