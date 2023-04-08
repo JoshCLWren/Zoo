@@ -378,8 +378,10 @@ class Project:
 
         # find any imports that are not external packages requiring installation by pip
         # breakpoint()
-        self.skipped_libraries = stdlib_check.Builtins().get(self.import_blocks)
+        self.skipped_libraries = stdlib_check.Builtins().get()
+        breakpoint()
         assert "keras" not in self.skipped_libraries
+        assert "dataclasses" in self.skipped_libraries
         self.import_blocks = self.filter_unique_tokens(self.import_blocks)
         assert "requests" in self.skipped_libraries
         # filter out any imports that may be importing a project file or module
@@ -463,9 +465,7 @@ class Project:
 
         live_modules, live_sub_modules = [], []
         for block in import_blocks:
-            if "keras" in block:
-                # breakpoint()
-                pass
+
             if "." in block:
                 split_mod = block.split(".")
                 live_modules.append(split_mod[0])
