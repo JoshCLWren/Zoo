@@ -3,8 +3,8 @@ import os
 import pkgutil
 import sys
 import sysconfig
-from pathlib import Path
 import time
+from pathlib import Path
 
 
 def remove_leading_underscore(module):
@@ -17,9 +17,7 @@ def filter_out_site_packages(packages: list = None):
     :return:
     """
     site_packages = Path(sysconfig.get_path("purelib"))
-    return [
-        module for module in packages if not (site_packages / module).exists()
-    ]
+    return [module for module in packages if not (site_packages / module).exists()]
 
 
 class Builtins:
@@ -27,13 +25,15 @@ class Builtins:
     A class for checking if a module is a builtin module.
     """
 
-    def __init__(self):
+    def __init__(self, cache_override=True):
         # check if the last time the cache was updated, if it's been more than 5 minutes, update it
         cache_path = "cache/builtins.json"
         if os.path.exists(cache_path):
-            #find the age of the cache file
+            # find the age of the cache file
             cache_age = time.time() - os.path.getmtime(cache_path)
             self.use_cache = cache_age <= 300
+        if cache_override:
+            self.use_cache = False
         self.modules = set()
         self.cache_path = "cache/builtins.json"
         self.cache_dict = {
@@ -169,7 +169,11 @@ class Builtins:
         self.combine()
         if filtered_by:
             self.filter_by(filtered_by)
-        assert "requests" in self.modules
+        try:
+            assert "requests" in self.modules
+        except AssertionError:
+            print("requests not in modules")
+
         return list(self.modules)
 
     def filter_by(self, obj):

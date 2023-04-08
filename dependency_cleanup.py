@@ -82,11 +82,11 @@ def main(args, file=None):
     project_path = args.project_path or os.getcwd()
     project = Project(project_path=project_path, file=file)
     requirements.install(args, scan_project=True)
+    requirements.remove_unused_requirements(args)
     project.get_python_files()
     project.get_imports()
     project.filter_imports(requirements)
     assert "statsmodel" not in project.final_dead_imports
-    breakpoint()
     project.remove_dead_imports()
     project.validate_requirements(requirements)
     requirements.remove_unused_requirements(args)
@@ -118,7 +118,7 @@ class Requirements:
         "tomlkit",
         "pytest",
         "argparse",
-        "ast"
+        "ast",
     )
     txt_requirements = []
     requirements_installed = []
@@ -161,8 +161,9 @@ class Requirements:
         Install the base requirements for this project and compile a list of requirements.txt
         :return:
         """
+        breakpoint()
         if not self.requirements_installed:
-            self.check_env_packages()
+            self.check_env_packages(args)
         if self.packages_to_install:
             custom_print("Installing base requirements...")
             # create a temporary requirements file
@@ -170,7 +171,7 @@ class Requirements:
         self.create_requirements_file(scan_project=scan_project)
 
     def create_requirements_file(
-            self, create_master_requirements=True, scan_project=True
+        self, create_master_requirements=True, scan_project=True
     ):
         """
         Create a requirements.txt file for the project.
@@ -245,15 +246,33 @@ class Requirements:
             cmd.append("-q")
         env_packages = subprocess.check_output(cmd)
         env_packages = env_packages.decode("utf-8").splitlines()
+
         packages_to_install = []
+        # compare this to the requirements.txt file, remove any environment packages that are not in the
+        # requirements.txt
+        requiments_files_packages = []
+        with open("requirements.txt", "r") as f:
+            for line in f:
+                if (
+                    line.strip() in env_packages
+                    and line.strip() not in self.base_requirements
+                    and line.strip() not in requiments_files_packages
+                ):
+                    self.packages_to_remove.append(line.strip())
+                requiments_files_packages.append(line.strip())
+        if self.packages_to_remove:
+            breakpoint()
+            pass
         for package in env_packages:
-            self.requirements_installed.append(package.split("==")[0])
+            if package in requiments_files_packages:
+                packages_to_install.append(package)
         if self.base_requirements:
             for package in self.base_requirements:
                 if package not in env_packages:
                     self.txt_requirements.append(package)
                     packages_to_install.append(package)
         if packages_to_install:
+            assert "keras" not in packages_to_install
             self.packages_to_install = packages_to_install
 
 
@@ -331,20 +350,23 @@ class Project:
         :param requirements_instance:
         :return:
         """
+
         assert "requests" not in self.final_dead_imports
-        self.import_blocks = self.filter_unique_tokens(self.import_blocks)
+
         # find any imports that are not external packages requiring installation by pip
         self.skipped_libraries = stdlib_check.Builtins().get(self.import_blocks)
+        self.import_blocks = self.filter_unique_tokens(self.import_blocks)
         assert "requests" in self.skipped_libraries
         # filter out any imports that may be importing a project file or module
         self.projects_modules = self.inspect_project_level_imports()
         # add the project level imports to the skipped libraries list so they are not attempted to be installed
         self.skipped_libraries.extend(self.projects_modules)
         self.skipped_libraries = self.dedupe_list(self.skipped_libraries)
-
         # inspect the dead imports to see if they are project level imports
+        if self.dead_imports:
+            assert "keras" in self.dead_imports
         self.dead_imports = self.filter_unique_tokens(self.dead_imports)
-
+        assert "keras" in self.dead_imports
         # inspect the import blocks to see if they are project level imports as well
         self.import_blocks = self.filter_unique_tokens(self.import_blocks)
 
@@ -420,14 +442,11 @@ class Project:
                 split_mod = block.split(".")
                 live_modules.append(split_mod[0])
                 live_sub_modules.append(split_mod[1])
+        breakpoint()
         import_blocks.extend(live_modules)
         import_blocks.extend(live_sub_modules)
         unique_blocks = self.dedupe_list(import_blocks)
-        return [
-            block
-            for block in unique_blocks
-            if block not in self.skipped_libraries
-        ]
+        return [block for block in unique_blocks if block not in self.skipped_libraries]
 
     def remove_dead_imports(self):
         """
