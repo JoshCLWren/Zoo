@@ -284,7 +284,7 @@ class Requirements:
                     self.packages_to_remove.append(line.strip())
                 requiments_files_packages.append(line.strip())
         if self.packages_to_remove:
-            breakpoint()
+            # breakpoint()
             pass
         for package in env_packages:
             if package in requiments_files_packages:
@@ -377,7 +377,7 @@ class Project:
         assert "requests" not in self.final_dead_imports
 
         # find any imports that are not external packages requiring installation by pip
-        breakpoint()
+        # breakpoint()
         self.skipped_libraries = stdlib_check.Builtins().get(self.import_blocks)
         assert "keras" not in self.skipped_libraries
         self.import_blocks = self.filter_unique_tokens(self.import_blocks)
@@ -464,13 +464,13 @@ class Project:
         live_modules, live_sub_modules = [], []
         for block in import_blocks:
             if "keras" in block:
-                breakpoint()
+                # breakpoint()
                 pass
             if "." in block:
                 split_mod = block.split(".")
                 live_modules.append(split_mod[0])
                 live_sub_modules.append(split_mod[1])
-        breakpoint()
+        # breakpoint()
         import_blocks.extend(live_modules)
         import_blocks.extend(live_sub_modules)
         unique_blocks = self.dedupe_list(import_blocks)
@@ -488,9 +488,34 @@ class Project:
     def validate_requirements(self, requirements_instance):
         self.final_import_blocks = list(set(self.final_import_blocks))
         for import_block in self.final_import_blocks:
+            if import_block in self.skipped_libraries:
+                print(f"Skipping {import_block} as it matches a skipped library")
+                continue
             if "." in import_block:
                 try:
-                    import_block = import_block.split(".")[0]
+                    import_block_prefix = import_block.split(".")[0]
+                    import_block_suffix = import_block.split(".")[1]
+                    if import_block_prefix in self.skipped_libraries:
+                        print(f"Skipping {import_block} as it's prefix matches a skipped library")
+                        continue
+
+                    if import_block_suffix in self.skipped_libraries:
+                        print(f"Skipping {import_block} as it's suffix matches a skipped library")
+                        continue
+                    for block in self.skipped_libraries:
+                        possible_skip_reason = ""
+                        if import_block_prefix in block:
+                            possible_skip_reason += f" import block prefix {import_block_prefix} is a partial match for {block}"
+                        if import_block_suffix in block:
+                            possible_skip_reason += f" import block suffix {import_block_suffix} is a partial match for {block}"
+                        if possible_skip_reason != "":
+                            user_decision = input(
+                                f"We have detected that {import_block} is a partial match for {block}. Due to: {possible_skip_reason}. Do you want to skip this import block? (y/n)"
+                            )
+                            if user_decision.lower() == "y":
+                                print(f"Skipping {import_block} as it matches a skipped library")
+                                continue
+                    import_block = import_block_prefix
                 except Exception as e:
                     custom_print(f"Failed to remove . from {import_block}: {e}")
                     continue
@@ -506,8 +531,7 @@ class Project:
             }
         )
         # if somehow we've gotten into a state where we're trying to install a package that is skipped, return False
-        if package_name in self.skipped_libraries:
-            return False
+
         if package_name in pypi_package_aliases:
             self.import_blocks = [
                 module for module in self.import_blocks if module != package_name
