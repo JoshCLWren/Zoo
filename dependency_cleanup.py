@@ -64,21 +64,26 @@ def install_pip_urllib(args):
     custom_print("pip installed successfully.")
 
 
-def main(args):
+def main(args, file=None):
     """
     Main function.
     """
-    project_path = args.project_path or os.getcwd()
 
     startup_log = "Starting dependency_cleanup..."
-    global verbose_output
-    verbose_output = verbose_output = not args.silent
+    if args:
+        global verbose_output
+        verbose_output = verbose_output = not args.silent
+    else:
+        args = argparse.Namespace()
+        args.silent = False
+        args.project_path = None
+        verbose_output = True
     custom_print(startup_log)
     install_pip(args)
     requirements = Requirements(default=True)
     requirements.check_env_packages(args)
-
-    project = Project(project_path=project_path)
+    project_path = args.project_path or os.getcwd()
+    project = Project(project_path=project_path, file=file)
     requirements.install(args, scan_project=True)
     project.get_python_files()
     project.get_imports()
@@ -256,7 +261,7 @@ class Project:
     Project level attributes and methods.
     """
 
-    def __init__(self, project_path=None, silent=False):
+    def __init__(self, project_path=None, silent=False, file=None):
         self.PROJECT_PATH = project_path or os.path.dirname(os.path.abspath(__file__))
         custom_print(self.PROJECT_PATH)
         # start by installing the requirements
@@ -264,6 +269,11 @@ class Project:
         custom_print("Installed requirements")
         # List of files to ignore
         self.IGNORE_FILES = ["dependency_cleanup.py", "stdlib_check.py"]
+        if file:
+            python_file_instance = PythonFile(file)
+            self.python_files = [python_file_instance]
+        else:
+            self.python_files = []
         custom_print("Ignoring files: ", self.IGNORE_FILES)
         # add .gitignore to ignore files
         with open(os.path.join(self.PROJECT_PATH, ".gitignore")) as f:
@@ -272,7 +282,6 @@ class Project:
         # List of directories to ignore
         self.IGNORE_DIRS = [".git", "venv", "images", ".idea"]
         custom_print("Ignoring directories: ", self.IGNORE_DIRS)
-        self.python_files = []
         self.env_packages = []
         self.import_blocks = []
         self.dead_imports = []
@@ -285,18 +294,19 @@ class Project:
 
     def get_python_files(self):
         # Walk through the project directory and find all python files
-        py_files = []
-        for root, dirs, files in os.walk(self.PROJECT_PATH):
-            # Remove ignored directories from the list
-            dirs[:] = [d for d in dirs if d not in self.IGNORE_DIRS]
-            py_files.extend(
-                os.path.join(root, file)
-                for file in files
-                if file.endswith(".py") and file not in self.IGNORE_FILES
-            )
-        # instantiate each python file as PythonFile object and add it to a list
-        for file in py_files:
-            self.python_files.append(PythonFile(file))
+        if not self.python_files:
+            py_files = []
+            for root, dirs, files in os.walk(self.PROJECT_PATH):
+                # Remove ignored directories from the list
+                dirs[:] = [d for d in dirs if d not in self.IGNORE_DIRS]
+                py_files.extend(
+                    os.path.join(root, file)
+                    for file in files
+                    if file.endswith(".py") and file not in self.IGNORE_FILES
+                )
+            # instantiate each python file as PythonFile object and add it to a list
+            for file in py_files:
+                self.python_files.append(PythonFile(file))
         custom_print(f"Found {len(self.python_files)} python files")
 
     def get_imports(self):
@@ -507,40 +517,43 @@ class PythonFile:
         self.dead_imports = list(set(self.dead_imports))
 
     def remove_unused_imports(self, final_dead_imports):
+        assert "PyDictionary" not in final_dead_imports
         custom_print(f"Removing unused imports from {self.file_location}")
         with open(self.file_location) as f:
             lines = f.read().splitlines()
         backup_lines = lines.copy()
 
-        def is_dead_import(line):
-            for dead_import in final_dead_imports:
-                if dead_import in line and "import" in line:
-                    return True
-            return False
+        new_lines = []
+        for node in ast.walk(ast.parse("\n".join(lines))):
+            if isinstance(node, (ast.Import, ast.ImportFrom)) and (
+                    not new_lines or new_lines[-1] != lines[node.lineno - 1]
+            ):
+                new_lines.append(lines[node.lineno - 1])
 
         file_changes = False
+        in_multiline_import = False
+        multiline_import_dead = False
         try:
             with open(self.file_location, "w") as f:
-                multiline_import = False
-                new_multiline_import = []
                 for line in lines:
-                    if multiline_import:
-                        if ")" in line:
-                            multiline_import = False
-                            new_multiline_import.append(line)
-                            if len(new_multiline_import) > 1:
-                                for new_line in new_multiline_import:
-                                    f.write(f"{new_line}\n")
-                        elif not is_dead_import(line):
-                            new_multiline_import.append(line)
-                    elif not is_dead_import(line):
-                        f.write(f"{line}\n")
-                    else:
-                        file_changes = True
+                    if line.startswith("from ") and "(" in line:
+                        in_multiline_import = True
+                        multiline_import_dead = all(import_ in final_dead_imports for import_ in self.imports if
+                                                    line.strip().split(" ")[1] in import_)
 
-                    if "(" in line and "import" in line:
-                        multiline_import = True
-                        new_multiline_import = [line]
+                    if in_multiline_import:
+                        if multiline_import_dead:
+                            file_changes = True
+                        else:
+                            f.write(f"{line}\n")
+                        if ")" in line:
+                            in_multiline_import = False
+                    else:
+                        if line in final_dead_imports:
+                            file_changes = True
+                        elif line not in new_lines:
+                            f.write(f"{line}\n")
+
         except Exception as e:
             custom_print(f"Failed to remove unused imports from {self.file_location}: {e}")
             with open(self.file_location, "w") as f:

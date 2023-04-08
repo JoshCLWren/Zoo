@@ -8,6 +8,7 @@ beautifulsoup4
 black
 bs4
 cairocffi
+CairoSVG
 certifi
 cffi
 charset-normalizer
@@ -15,6 +16,7 @@ click
 cssselect2
 defusedxml
 dill
+emoji
 Faker
 fancycompleter
 flake8
@@ -32,6 +34,7 @@ mypy-extensions
 numpy
 openai
 packaging
+pandas
 pathspec
 pdbpp
 Pillow
@@ -48,8 +51,10 @@ Pygments
 pylint
 pypng
 pyrepl
+pytest
 python-dateutil
 pytz
+qrcode
 requests
 setuptools
 six
