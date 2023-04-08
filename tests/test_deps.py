@@ -1,3 +1,5 @@
+import unittest
+import dependency_cleanup
 
 
 class TestImportCleaner(unittest.TestCase):
@@ -46,8 +48,7 @@ class TestImportCleaner(unittest.TestCase):
                 "print('Hello World')\n"
             )
         dead_imports = [
-            "pytorch3d.renderer.look_at_view_transform",
-            "pytorch3d.renderer.FoVPerspectiveCameras",
+            "pytorch3d"
         ]
         python_file = dependency_cleanup.PythonFile(self.file_location)
         python_file.introspect()

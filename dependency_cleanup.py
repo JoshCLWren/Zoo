@@ -118,6 +118,8 @@ class Requirements:
         "dill",
         "mccabe",
         "tomlkit",
+        "pytest",
+        "argparse",
     )
     txt_requirements = []
     requirements_installed = []
@@ -268,7 +270,7 @@ class Project:
 
         custom_print("Installed requirements")
         # List of files to ignore
-        self.IGNORE_FILES = ["dependency_cleanup.py", "stdlib_check.py"]
+        self.IGNORE_FILES = ["dependency_cleanup.py", "stdlib_check.py", "test_deps.py"]
         if file:
             python_file_instance = PythonFile(file)
             self.python_files = [python_file_instance]
@@ -517,48 +519,53 @@ class PythonFile:
         self.dead_imports = list(set(self.dead_imports))
 
     def remove_unused_imports(self, final_dead_imports):
+        """
+        Removes unused imports from the file
+        :param final_dead_imports: a list of imports that are unused in the entire project
+        :return:
+        """
         assert "PyDictionary" not in final_dead_imports
         custom_print(f"Removing unused imports from {self.file_location}")
+
         with open(self.file_location) as f:
-            lines = f.read().splitlines()
+            lines = f.readlines()
+
         backup_lines = lines.copy()
 
-        new_lines = []
-        for node in ast.walk(ast.parse("\n".join(lines))):
-            if isinstance(node, (ast.Import, ast.ImportFrom)) and (
-                    not new_lines or new_lines[-1] != lines[node.lineno - 1]
-            ):
-                new_lines.append(lines[node.lineno - 1])
+        def is_line_unused_import(line):
+            for dead_import in final_dead_imports:
+                if dead_import in line:
+                    return True
+            return False
 
-        file_changes = False
-        in_multiline_import = False
-        multiline_import_dead = False
+        new_lines = []
+        multiline_import = False
+        for line in lines:
+            if "import (" in line:
+                multiline_import = True
+            if ")" in line:
+                multiline_import = False
+
+            if not multiline_import and is_line_unused_import(line):
+                continue
+
+            if multiline_import and is_line_unused_import(line):
+                line = line.replace(',', '')
+
+            new_lines.append(line)
+
+        file_changes = "".join(lines) != "".join(new_lines)
+
         try:
             with open(self.file_location, "w") as f:
-                for line in lines:
-                    if line.startswith("from ") and "(" in line:
-                        in_multiline_import = True
-                        multiline_import_dead = all(import_ in final_dead_imports for import_ in self.imports if
-                                                    line.strip().split(" ")[1] in import_)
-
-                    if in_multiline_import:
-                        if multiline_import_dead:
-                            file_changes = True
-                        else:
-                            f.write(f"{line}\n")
-                        if ")" in line:
-                            in_multiline_import = False
-                    else:
-                        if line in final_dead_imports:
-                            file_changes = True
-                        elif line not in new_lines:
-                            f.write(f"{line}\n")
+                for line in new_lines:
+                    f.write(line)
 
         except Exception as e:
             custom_print(f"Failed to remove unused imports from {self.file_location}: {e}")
             with open(self.file_location, "w") as f:
                 for line in backup_lines:
-                    f.write(f"{line}\n")
+                    f.write(line)
 
         if file_changes:
             custom_print(f"Removed unused imports from {self.file_location}")
