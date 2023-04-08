@@ -532,30 +532,33 @@ class PythonFile:
 
         backup_lines = lines.copy()
 
-        def is_line_unused_import(line):
-            for dead_import in final_dead_imports:
-                if dead_import in line:
-                    return True
-            return False
+        def is_line_unused_import(code_line):
+            tokens = [code_line]
+            # split by any non alphanumeric character
+            for token in re.split(r"\W+", code_line):
+                if token not in ["", "import", "from", "as"]:
+                    tokens.append(token)
+            if any(token in final_dead_imports for token in tokens):
+                return True
 
         new_lines = []
         multiline_import = False
         for line in lines:
             if "import (" in line:
                 multiline_import = True
-            if ")" in line:
+                if is_line_unused_import(line):
+                    continue
+            if ")" in line and multiline_import:
                 multiline_import = False
-
+                continue
+            if multiline_import:
+                continue
             if not multiline_import and is_line_unused_import(line):
                 continue
-
-            if multiline_import and is_line_unused_import(line):
-                line = line.replace(',', '')
-
             new_lines.append(line)
 
-        file_changes = "".join(lines) != "".join(new_lines)
 
+        file_changes = "".join(lines) != "".join(new_lines)
         try:
             with open(self.file_location, "w") as f:
                 for line in new_lines:
