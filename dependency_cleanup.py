@@ -170,7 +170,7 @@ class Requirements:
         self.create_requirements_file(scan_project=scan_project)
 
     def create_requirements_file(
-        self, create_master_requirements=True, scan_project=True
+            self, create_master_requirements=True, scan_project=True
     ):
         """
         Create a requirements.txt file for the project.
@@ -326,17 +326,54 @@ class Project:
         custom_print(f"Found {len(self.dead_imports)} unused imports in all files")
 
     def filter_imports(self, requirements_instance):
-        live_modules, live_sub_modules = [], []
-        for block in self.import_blocks:
-            if "." in block:
-                split_mod = block.split(".")
-                live_modules.append(split_mod[0])
-                live_sub_modules.append(split_mod[1])
-        self.import_blocks.extend(live_modules)
-        self.import_blocks.extend(live_sub_modules)
-        self.import_blocks = list(set(self.import_blocks))
+        """
+        Filter out any imports that don't need to be installed or removed.
+        :param requirements_instance:
+        :return:
+        """
+        assert "requests" not in self.final_dead_imports
+        self.import_blocks = self.filter_unique_tokens(self.import_blocks)
+        # find any imports that are not external packages requiring installation by pip
         self.skipped_libraries = stdlib_check.Builtins().get(self.import_blocks)
+        assert "requests" in self.skipped_libraries
         # filter out any imports that may be importing a project file or module
+        self.projects_modules = self.inspect_project_level_imports()
+        # add the project level imports to the skipped libraries list so they are not attempted to be installed
+        self.skipped_libraries.extend(self.projects_modules)
+        self.skipped_libraries = self.dedupe_list(self.skipped_libraries)
+
+        # inspect the dead imports to see if they are project level imports
+        self.dead_imports = self.filter_unique_tokens(self.dead_imports)
+
+        # inspect the import blocks to see if they are project level imports as well
+        self.import_blocks = self.filter_unique_tokens(self.import_blocks)
+
+        # ensure that final import blocks does not contain any dead imports, this prevents the script from trying to
+        # install packages that are either standard libraries or project level imports
+        # final_import_blocks is used to install packages
+        self.final_import_blocks = [
+            import_block
+            for import_block in self.import_blocks
+            if import_block not in self.dead_imports
+        ]
+        # ensure that final dead imports does not contain any import blocks that are skipped
+        # this prevents the script from trying to remove standard libraries or project level imports
+        # from python file import statements
+        # final_dead_imports is used to remove imports from python files
+        self.final_dead_imports = [
+            import_block
+            for import_block in self.dead_imports
+            if import_block not in self.skipped_libraries
+        ]
+        self.final_dead_imports = self.dedupe_list(self.final_dead_imports)
+        assert "requests" not in self.final_dead_imports
+        assert "keras" in self.final_dead_imports
+
+    def inspect_project_level_imports(self):
+        """
+        Create a list of what could be project level imports
+        :return:
+        """
         project_files = []
         project_folders = []
         for file in self.python_files:
@@ -353,98 +390,51 @@ class Project:
                 project_files.append(split_file_location[-1].replace(".py", ""))
                 # add all remaining folders to the project folders list
                 project_folders.extend(split_file_location[:-1])
-        project_files = list(set(project_files))
-        project_folders = list(set(project_folders))
+        project_files = self.dedupe_list(project_files)
+        project_folders = self.dedupe_list(project_folders)
         self.projects_modules.extend(project_files)
         self.projects_modules.extend(project_folders)
-        self.skipped_libraries = list(self.skipped_libraries)
-        self.skipped_libraries.extend(self.projects_modules)
-        self.skipped_libraries = list(set(self.skipped_libraries))
+        self.projects_modules = self.dedupe_list(self.projects_modules)
+        return self.projects_modules
 
+    @staticmethod
+    def dedupe_list(list_to_dedupe):
+        """
+        Convert a list to a set to remove duplicates and then convert back to a list
+        :param list_to_dedupe:
+        :return: list of unique items
+        """
+        return list(set(list_to_dedupe))
 
-        custom_print(f"Found {len(self.skipped_libraries)} python standard libraries")
-        self.possible_project_level_libraries = [
-            file[:-3] for file in self.IGNORE_FILES
-        ]
-        custom_print(
-            f"Found {len(self.possible_project_level_libraries)} possible project level libraries"
-        )
-        self.skipped_libraries = list(set(self.skipped_libraries))
-        self.skipped_libraries.extend(list(self.possible_project_level_libraries))
-        dead_modules, dead_sub_modules = [], []
-        for block in self.dead_imports:
+    def filter_unique_tokens(self, import_blocks):
+        """
+        Split any import blocks that are importing a module or submodule
+        Check if the import blocks are in self.skipped_libraries and if so remove them
+        :param import_blocks: list of import blocks
+        :return: list of import blocks without any skipped libraries
+        """
+
+        live_modules, live_sub_modules = [], []
+        for block in import_blocks:
             if "." in block:
                 split_mod = block.split(".")
-                dead_modules.append(split_mod[0])
-                dead_sub_modules.append(split_mod[1])
-        self.dead_imports.extend(dead_modules)
-        self.dead_imports.extend(dead_sub_modules)
-        self.dead_imports = list(set(self.dead_imports))
-
-        fine_filter = []
-        for final_import in self.import_blocks:
-            tokens = final_import.split(".")
-            for token in tokens:
-                if token in fine_filter:
-                    continue
-                if token in self.skipped_libraries:
-                    reason = ""
-                    if token in self.possible_project_level_libraries:
-                        reason = "Possible project level library"
-                    elif token in self.projects_modules:
-                        reason = "Project module"
-                    else:
-                        reason = "Python standard library"
-                    custom_print(f"Removing {final_import} from import blocks because it is a {reason}")
-                    fine_filter.append(token)
-
-        for import_block in fine_filter:
-            if import_block in self.import_blocks:
-                self.import_blocks.remove(import_block)
-        self.import_blocks = list(set(self.import_blocks))
-        self.final_import_blocks = [
-            import_block
-            for import_block in self.import_blocks
-            if import_block not in self.skipped_libraries and import_block not in self.dead_imports
+                live_modules.append(split_mod[0])
+                live_sub_modules.append(split_mod[1])
+        import_blocks.extend(live_modules)
+        import_blocks.extend(live_sub_modules)
+        unique_blocks = self.dedupe_list(import_blocks)
+        return [
+            block
+            for block in unique_blocks
+            if block not in self.skipped_libraries
         ]
-        custom_print(
-            f"After removing python standard libraries and project imports, {len(self.final_import_blocks)} imports remain"
-        )
-        # don't add python standard libraries to the requirements.txt file or the dead imports list
-
-        for import_block in self.dead_imports:
-            if import_block not in self.final_import_blocks and import_block in self.skipped_libraries:
-                self.final_dead_imports.append(import_block)
-
-            else:
-                custom_print(
-                    f"Removing {import_block} from dead imports as it appears to be a project level import"
-                )
-        assert "PyDictionary" not in self.final_dead_imports
-        assert "PyDictionary" not in self.final_dead_imports
-        self.top_level_python_files = [
-            file[:-3] for file in os.listdir(self.PROJECT_PATH) if file.endswith(".py")
-        ]
-        self.projects_modules = [
-            folder for folder in os.listdir(self.PROJECT_PATH) if os.path.isdir(folder)
-        ]
-        self.final_import_blocks = list(set(self.final_import_blocks))
-
-        self.final_import_blocks = [
-            lib
-            for lib in self.final_import_blocks
-            if lib not in self.final_dead_imports
-            and lib not in self.top_level_python_files
-            and lib not in self.projects_modules
-        ]
-        assert "PyDictionary" not in self.final_dead_imports
-        self.final_import_blocks = list(set(self.final_import_blocks))
-        for import_block in self.final_dead_imports:
-            requirements_instance.packages_to_remove.append(import_block)
-        assert "PyDictionary" not in self.final_dead_imports
 
     def remove_dead_imports(self):
-        assert "PyDictionary" not in self.final_dead_imports
+        """
+        Remove any unused imports from python files by calling the remove_unused_imports method on each file
+        :return:
+        """
+        assert "requests" not in self.final_dead_imports
         for file in self.python_files:
             file.remove_unused_imports(self.final_dead_imports)
 
@@ -663,7 +653,7 @@ class PythonFile:
                         if '"""' in line:
                             triple_quote_count += 1
                         if triple_quote_count == 2:
-                            index_to_insert = index + 1 # insert after the docstring
+                            index_to_insert = index + 1  # insert after the docstring
                             break
 
                 if new_import_statement.split(" ")[-1] not in ["in\n", "as\n"]:

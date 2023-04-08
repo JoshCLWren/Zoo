@@ -4,6 +4,7 @@ import pkgutil
 import sys
 import sysconfig
 from pathlib import Path
+import time
 
 
 def remove_leading_underscore(module):
@@ -27,7 +28,12 @@ class Builtins:
     """
 
     def __init__(self):
-        self.use_cache = True
+        # check if the last time the cache was updated, if it's been more than 5 minutes, update it
+        cache_path = "cache/builtins.json"
+        if os.path.exists(cache_path):
+            #find the age of the cache file
+            cache_age = time.time() - os.path.getmtime(cache_path)
+            self.use_cache = cache_age <= 300
         self.modules = set()
         self.cache_path = "cache/builtins.json"
         self.cache_dict = {
@@ -35,6 +41,7 @@ class Builtins:
             "c_implemented_modules": [],
             "stdlib_modules": [],
             "python_system_files": [],
+            "site_packages": [],
             "modules": [],
         }
 
@@ -135,6 +142,7 @@ class Builtins:
             + self.c_implemented_modules()
             + self.stdlib_modules()
             + self.python_system_files()
+            + self.python_site_packages()
         )
         self.modules = self.cache_output(output, name)
         return self.modules
@@ -157,12 +165,29 @@ class Builtins:
         self.python_system_files()
         self.c_implemented_modules()
         self.builtin_modules()
+        self.python_site_packages()
         self.combine()
         if filtered_by:
             self.filter_by(filtered_by)
-        return self.modules
+        assert "requests" in self.modules
+        return list(self.modules)
 
     def filter_by(self, obj):
         self.modules = set([module for module in self.modules if module in obj])
 
         return self.modules
+
+    def python_site_packages(self):
+        """
+        Get a list of all the site packages.
+        :return: Path
+        """
+        packages = []
+        site_packages = Path(sysconfig.get_path("purelib"))
+        for file in site_packages.glob("**/*"):
+            if file.is_dir():
+                packages.append(file.name)
+            else:
+                packages.append(file.name[:-3])
+        assert "requests" in packages
+        return self.cache_output(packages, "site_packages")
