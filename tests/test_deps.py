@@ -1,6 +1,3 @@
-import unittest
-import argparse
-import dependency_cleanup
 
 
 class TestImportCleaner(unittest.TestCase):
@@ -39,6 +36,12 @@ class TestImportCleaner(unittest.TestCase):
                 "from pytorch3d.renderer import (\n"
                 "    look_at_view_transform,\n"
                 "    FoVPerspectiveCameras,\n"
+                "    PointLights,\n"
+                "    RasterizationSettings,\n"
+                "    MeshRenderer,\n"
+                "    MeshRasterizer,\n"
+                "    SoftPhongShader,\n"
+                "    TexturesVertex,\n"
                 ")\n"
                 "print('Hello World')\n"
             )
