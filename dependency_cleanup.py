@@ -507,12 +507,6 @@ class PythonFile:
         self.dead_imports = list(set(self.dead_imports))
 
     def remove_unused_imports(self, final_dead_imports):
-        """
-        Removes unused imports from the file
-        :param final_dead_imports: a list of imports that are unused in the entire project
-        :return:
-        """
-        assert "PyDictionary" not in final_dead_imports
         custom_print(f"Removing unused imports from {self.file_location}")
         with open(self.file_location) as f:
             lines = f.read().splitlines()
