@@ -543,20 +543,55 @@ class PythonFile:
 
         new_lines = []
         multiline_import = False
-        for line in lines:
+        multiline_imports = []
+        modified_multiline_imports = {}
+        multi_line_string = ""
+        for index, line in enumerate(lines):
+
             if "import (" in line:
                 multiline_import = True
+                multi_line_string = line
                 if is_line_unused_import(line):
                     continue
             if ")" in line and multiline_import:
                 multiline_import = False
+                multi_line_string = multi_line_string + line
+                multiline_imports.append({"full_string": multi_line_string, "usages": []})
                 continue
             if multiline_import:
+                multi_line_string = multi_line_string + line
                 continue
             if not multiline_import and is_line_unused_import(line):
                 continue
+
+            if line in ["", "import", "from", "as"]:
+                continue
             new_lines.append(line)
 
+            line_tokens = re.split(r"\W+", line)
+            for line_token in line_tokens:
+                if line_token == "":
+                    continue
+                for long_import in multiline_imports:
+                    if line_token in long_import['full_string']:
+
+                        if modified_multiline_imports.get(long_import['full_string']):
+                            modified_multiline_imports[long_import['full_string']].append(line_token)
+                        modified_multiline_imports[long_import['full_string']] = [line_token]
+        if modified_multiline_imports:
+            for found_uses in modified_multiline_imports:
+                new_lines_copy = new_lines.copy()
+                import_prefix = "from " if "from" in found_uses else "import "
+                package = found_uses.split(" ")[1]
+                import_prefix = import_prefix + package + " import " if "from" in found_uses else import_prefix + package + " ("
+                new_import_statement = import_prefix + ", ".join(modified_multiline_imports[found_uses])
+                # add the new import statement to the new lines but in the beginning
+                if "(" in new_import_statement:
+                    new_import_statement = f"{new_import_statement})\n"
+                else:
+                    new_import_statement = f"{new_import_statement}\n"
+                new_lines_copy.insert(0, new_import_statement)
+                new_lines = new_lines_copy
 
         file_changes = "".join(lines) != "".join(new_lines)
         try:

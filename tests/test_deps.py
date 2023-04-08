@@ -58,6 +58,54 @@ class TestImportCleaner(unittest.TestCase):
 
         self.assertEqual(content, "print('Hello World')\n")
 
+    def test_unused_pandas_import(self):
+        with open(self.file_location, "w") as f:
+            f.write(
+                "import pandas as pd\n"
+                "print('Hello World')\n"
+            )
+        dead_imports = [
+            "pandas"
+        ]
+        python_file = dependency_cleanup.PythonFile(self.file_location)
+        python_file.introspect()
+        python_file.remove_unused_imports(dead_imports)
+        with open(self.file_location, "r") as f:
+            content = f.read()
+
+        self.assertEqual(content, "print('Hello World')\n")
+
+    def test_partially_used_multiline(self):
+        with open(self.file_location, "w") as f:
+            f.write(
+                "from pytorch3d.renderer import (\n"
+                "    look_at_view_transform,\n"
+                "    FoVPerspectiveCameras,\n"
+                "    PointLights,\n"
+                "    RasterizationSettings,\n"
+                "    MeshRenderer,\n"
+                "    MeshRasterizer,\n"
+                "    SoftPhongShader,\n"
+                "    TexturesVertex,\n"
+                ")\n"
+                "look_at_view_transform()\n"
+                "print('Hello World')\n"
+            )
+        dead_imports = [
+            "FoVPerspectiveCameras",
+            "PointLights",
+            "RasterizationSettings",
+            "MeshRenderer",
+            "MeshRasterizer",
+            "SoftPhongShader",
+            "TexturesVertex",
+        ]
+        python_file = dependency_cleanup.PythonFile(self.file_location)
+        python_file.introspect()
+        python_file.remove_unused_imports(dead_imports)
+        with open(self.file_location, "r") as f:
+            content = f.read()
+        self.assertEqual(content, "from pytorch3d.renderer import look_at_view_transform\nlook_at_view_transform()\nprint('Hello World')\n")
 
 if __name__ == "__main__":
     unittest.main()
