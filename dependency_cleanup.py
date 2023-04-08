@@ -559,7 +559,6 @@ class PythonFile:
         self.dead_imports = list(set(self.dead_imports))
         assert "PyDictionary" not in self.dead_imports
 
-
     def remove_unused_imports(self, final_dead_imports):
         """
         Removes unused imports from the file
@@ -583,9 +582,9 @@ class PythonFile:
         try:
             with open(self.file_location, "w") as f:
                 for line in lines:
-                    if line in final_dead_imports:
+                    if any(dead_import in line for dead_import in final_dead_imports):
                         file_changes = True
-                    if line not in final_dead_imports or line not in new_lines:
+                    else:
                         f.write(f"{line}\n")
         except Exception as e:
             custom_print(f"Failed to remove unused imports from {self.file_location}: {e}")
