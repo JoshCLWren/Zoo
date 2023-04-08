@@ -466,26 +466,24 @@ class PythonFile:
         self.dead_imports = []
 
     def introspect(self):
-        """
-        Introspect the file and find all imports and separate them into valid and invalid imports
-        valid imports are imports that are used in the file
-        dead imports are imports that are not used in the file beyond the import statement
-        :return:
-        """
         with open(self.file_location, "r") as file:
             tree = ast.parse(file.read())
 
         imported_names = set()
+        imported_full_names = {}
 
         for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 for alias in node.names:
+                    imported_name = None
                     if isinstance(node, ast.Import):
                         imported_name = alias.name
                     elif isinstance(node, ast.ImportFrom):
                         imported_name = alias.name if node.module is None else f"{node.module}.{alias.name}"
-                    self.imports.append(imported_name)
-                    imported_names.add(alias.name)
+                    if imported_name is not None:
+                        self.imports.append(imported_name)
+                        imported_names.add(alias.name)
+                        imported_full_names[alias.name] = imported_name
 
         class UsageVisitor(ast.NodeVisitor):
             def __init__(self, imported_names):
@@ -499,73 +497,14 @@ class PythonFile:
         visitor = UsageVisitor(imported_names)
         visitor.visit(tree)
 
-        self.valid_imports = list(visitor.used_names)
-
-        # Consider an import valid if its root is in valid_imports
-        def is_valid_import(import_):
-            if "." not in import_:
-                return import_ in self.valid_imports
-            root = import_.split(".")[0]
-            return root in self.valid_imports
+        self.valid_imports = [imported_full_names[name] for name in visitor.used_names]
 
         for import_ in self.imports:
-            if is_valid_import(import_):
-                self.valid_imports.append(import_)
-            else:
-                split_import = import_.split(".")
-                index_one = split_import[0]
-                try:
-                    index_two = split_import[1]
-                except IndexError:
-                    index_two = None
+            if import_ not in self.valid_imports:
+                self.dead_imports.append(import_)
 
-                if is_valid_import(index_one) and index_one not in self.valid_imports:
-                    self.valid_imports.append(index_one)
-                    continue
-                if not index_two:
-                    self.dead_imports.extend([import_, index_one])
-                    continue
-                elif is_valid_import(index_two) and index_two not in self.valid_imports:
-                    self.valid_imports.append(index_two)
-                    continue
-                else:
-                    self.dead_imports.extend([import_, index_one, index_two])
-        valid_import_copy = self.valid_imports.copy()
-        for module in valid_import_copy:
-            if "." in module:
-                self.valid_imports.append(module.split(".")[0])
-                self.valid_imports.append(module.split(".")[1])
-                self.valid_imports.append(module)
         self.valid_imports = list(set(self.valid_imports))
         self.dead_imports = list(set(self.dead_imports))
-        dead_import_copy = self.dead_imports.copy()
-        # add any varations of imports to self.valid_imports i.e; 'bs4.BeautifulSoup' would have 3 entries in self.valid_imports
-        # 'bs4', 'BeautifulSoup', 'bs4.BeautifulSoup'
-        for import_ in dead_import_copy:
-            if "." in import_:
-                if import_.split(".")[0] in self.valid_imports:
-                    print(import_)
-                    self.dead_imports.remove(import_)
-                    self.valid_imports.append(import_)
-                    self.valid_imports.append(import_.split(".")[0])
-                    if len(import_.split(".")) > 2:
-                        self.dead_imports.append(import_.split(".")[1])
-                    continue
-                if import_.split(".")[1] in self.valid_imports:
-                    print(import_)
-                    self.dead_imports.remove(import_)
-                    self.valid_imports.append(import_)
-                    self.valid_imports.append(import_.split(".")[1])
-                    if len(import_.split(".")) > 2:
-                        self.dead_imports.append(import_.split(".")[0])
-                    continue
-            else:
-                if import_ in self.valid_imports:
-                    print(import_)
-                    self.dead_imports.remove(import_)
-                    self.valid_imports.append(import_)
-        self.dead_imports = list(set(self.dead_imports))
-        assert "PyDictionary" not in self.dead_imports
 
     def remove_unused_imports(self, final_dead_imports):
         """
