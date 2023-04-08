@@ -505,6 +505,9 @@ class Project:
                 "bs4": "beautifulsoup4",  # beautifulsoup4 is the new name for bs4
             }
         )
+        # if somehow we've gotten into a state where we're trying to install a package that is skipped, return False
+        if package_name in self.skipped_libraries:
+            return False
         if package_name in pypi_package_aliases:
             self.import_blocks = [
                 module for module in self.import_blocks if module != package_name
