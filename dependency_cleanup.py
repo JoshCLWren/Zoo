@@ -468,9 +468,12 @@ class Project:
 
             if "." in block:
                 split_mod = block.split(".")
+                if split_mod[0] in self.skipped_libraries:
+                    # prevent submodules from being added to the list of imports to be installed
+                    # if the parent module is a skipped library
+                    continue
                 live_modules.append(split_mod[0])
                 live_sub_modules.append(split_mod[1])
-        # breakpoint()
         import_blocks.extend(live_modules)
         import_blocks.extend(live_sub_modules)
         unique_blocks = self.dedupe_list(import_blocks)
