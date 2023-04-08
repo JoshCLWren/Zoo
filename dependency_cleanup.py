@@ -79,9 +79,10 @@ def main(args, file=None):
     install_pip(args)
     requirements = Requirements(default=True)
     requirements.check_env_packages(args)
+    requirements.uninstall_non_default_packages(args)
+    requirements.install(args, scan_project=True)
     project_path = args.project_path or os.getcwd()
     project = Project(project_path=project_path, file=file)
-    requirements.install(args, scan_project=True)
     requirements.remove_unused_requirements(args)
     project.get_python_files()
     project.get_imports()
@@ -118,7 +119,9 @@ class Requirements:
         "tomlkit",
         "pytest",
         "argparse",
-        "ast",
+        "pluggy",
+        "iniconfig",
+        "attrs"
     )
     txt_requirements = []
     requirements_installed = []
@@ -156,12 +159,32 @@ class Requirements:
             os.system(cmd)
             os.remove(removed_requirements)
 
+    def uninstall_non_default_packages(self, args):
+        """
+        Uninstall any packages that are not in the default requirements.
+        """
+
+        cmd = "pip freeze"
+        if args.silent:
+            cmd += " -q"
+        installed_packages = subprocess.check_output(cmd, shell=True).decode("utf-8")
+        if packages_to_uninstall := [
+            package.split("==")[0]
+            for package in installed_packages.splitlines()
+            if package.split("==")[0] not in self.base_requirements
+        ]:
+            custom_print("Uninstalling non-default packages...")
+            cmd = f"pip uninstall {' '.join(packages_to_uninstall)} -y"
+            if args.silent:
+                cmd += " -q"
+            os.system(cmd)
+
+
     def install(self, args, scan_project=False):
         """
         Install the base requirements for this project and compile a list of requirements.txt
         :return:
         """
-        breakpoint()
         if not self.requirements_installed:
             self.check_env_packages(args)
         if self.packages_to_install:
@@ -354,7 +377,9 @@ class Project:
         assert "requests" not in self.final_dead_imports
 
         # find any imports that are not external packages requiring installation by pip
+        breakpoint()
         self.skipped_libraries = stdlib_check.Builtins().get(self.import_blocks)
+        assert "keras" not in self.skipped_libraries
         self.import_blocks = self.filter_unique_tokens(self.import_blocks)
         assert "requests" in self.skipped_libraries
         # filter out any imports that may be importing a project file or module
@@ -438,6 +463,9 @@ class Project:
 
         live_modules, live_sub_modules = [], []
         for block in import_blocks:
+            if "keras" in block:
+                breakpoint()
+                pass
             if "." in block:
                 split_mod = block.split(".")
                 live_modules.append(split_mod[0])
