@@ -4,6 +4,8 @@ This script scans each python file in the project and checks for unused imports.
 
 import argparse
 import ast
+import builtins
+import logging
 import os
 import re
 import subprocess
@@ -13,11 +15,6 @@ import xmlrpc.client
 from typing import List, Tuple
 
 import stdlib_check
-import logging
-import argparse
-import builtins
-import logging
-import sys
 
 verbose_output = False
 
@@ -171,7 +168,7 @@ class Requirements:
         self.create_requirements_file(scan_project=scan_project)
 
     def create_requirements_file(
-            self, create_master_requirements=True, scan_project=True
+        self, create_master_requirements=True, scan_project=True
     ):
         """
         Create a requirements.txt file for the project.
@@ -360,9 +357,9 @@ class Project:
                 import_line = f"import {import_block}"
 
             if (
-                    " " in import_block
-                    and import_block.split(" ")[1]
-                    not in self.possible_project_level_libraries
+                " " in import_block
+                and import_block.split(" ")[1]
+                not in self.possible_project_level_libraries
             ):
                 if import_line not in self.final_dead_imports:
                     self.final_dead_imports.append(import_line)
@@ -387,8 +384,8 @@ class Project:
             lib
             for lib in self.final_import_blocks
             if lib not in self.final_dead_imports
-               and lib not in self.top_level_python_files
-               and lib not in self.projects_modules
+            and lib not in self.top_level_python_files
+            and lib not in self.projects_modules
         ]
         assert "PyDictionary" not in self.final_dead_imports
         self.final_import_blocks = list(set(self.final_import_blocks))
@@ -415,10 +412,12 @@ class Project:
                 requirements_instance.packages_to_install.append(package)
 
     def package_exists_on_pypi(self, package_name, retry_count=0):
-        pypi_package_aliases = {  # there are some packages that have changed names on pypi
-            "PIL": "Pillow",  # Pillow is the new name for PIL
-            "bs4": "beautifulsoup4",  # beautifulsoup4 is the new name for bs4
-        }
+        pypi_package_aliases = (
+            {  # there are some packages that have changed names on pypi
+                "PIL": "Pillow",  # Pillow is the new name for PIL
+                "bs4": "beautifulsoup4",  # beautifulsoup4 is the new name for bs4
+            }
+        )
         if package_name in pypi_package_aliases:
             self.import_blocks = [
                 module for module in self.import_blocks if module != package_name
@@ -491,7 +490,11 @@ class PythonFile:
                     if isinstance(node, ast.Import):
                         imported_name = alias.name
                     elif isinstance(node, ast.ImportFrom):
-                        imported_name = alias.name if node.module is None else f"{node.module}.{alias.name}"
+                        imported_name = (
+                            alias.name
+                            if node.module is None
+                            else f"{node.module}.{alias.name}"
+                        )
                     if imported_name is not None:
                         self.imports.append(imported_name)
                         imported_names.add(alias.name)
@@ -547,7 +550,6 @@ class PythonFile:
         modified_multiline_imports = {}
         multi_line_string = ""
         for index, line in enumerate(lines):
-
             if "import (" in line:
                 multiline_import = True
                 multi_line_string = line
@@ -556,7 +558,9 @@ class PythonFile:
             if ")" in line and multiline_import:
                 multiline_import = False
                 multi_line_string = multi_line_string + line
-                multiline_imports.append({"full_string": multi_line_string, "usages": []})
+                multiline_imports.append(
+                    {"full_string": multi_line_string, "usages": []}
+                )
                 continue
             if multiline_import:
                 multi_line_string = multi_line_string + line
@@ -573,35 +577,48 @@ class PythonFile:
                 if line_token == "":
                     continue
                 for long_import in multiline_imports:
-                    if line_token in long_import['full_string']:
-
-                        if modified_multiline_imports.get(long_import['full_string']):
-                            modified_multiline_imports[long_import['full_string']].append(line_token)
-                        modified_multiline_imports[long_import['full_string']] = [line_token]
+                    if line_token in long_import["full_string"]:
+                        if modified_multiline_imports.get(long_import["full_string"]):
+                            modified_multiline_imports[
+                                long_import["full_string"]
+                            ].append(line_token)
+                        modified_multiline_imports[long_import["full_string"]] = [
+                            line_token
+                        ]
         if modified_multiline_imports:
             for found_uses in modified_multiline_imports:
                 new_lines_copy = new_lines.copy()
                 import_prefix = "from " if "from" in found_uses else "import "
                 package = found_uses.split(" ")[1]
-                import_prefix = import_prefix + package + " import " if "from" in found_uses else import_prefix + package + " ("
-                new_import_statement = import_prefix + ", ".join(modified_multiline_imports[found_uses])
+                import_prefix = (
+                    import_prefix + package + " import "
+                    if "from" in found_uses
+                    else import_prefix + package + " ("
+                )
+                new_import_statement = import_prefix + ", ".join(
+                    modified_multiline_imports[found_uses]
+                )
                 # add the new import statement to the new lines but in the beginning
                 if "(" in new_import_statement:
                     new_import_statement = f"{new_import_statement})\n"
                 else:
                     new_import_statement = f"{new_import_statement}\n"
                 # check the last word of the import statement if its "in" or "as" then remove it then do not add a new line
-                if new_import_statement.split(" ")[-1] not in ["in", "as"]:
+                if new_import_statement.split(" ")[-1] not in ["in\n", "as\n"]:
                     new_lines_copy.insert(0, new_import_statement)
                     new_lines = new_lines_copy
         file_changes = "".join(lines) != "".join(new_lines)
         try:
             with open(self.file_location, "w") as f:
                 for line in new_lines:
-                    f.write(line)
+                    # check the last word of the import statement if its "in" or "as" then remove it then do not add a new line
+                    if line.split(" ")[-1] not in ["in", "as"]:
+                        f.write(line)
 
         except Exception as e:
-            custom_print(f"Failed to remove unused imports from {self.file_location}: {e}")
+            custom_print(
+                f"Failed to remove unused imports from {self.file_location}: {e}"
+            )
             with open(self.file_location, "w") as f:
                 for line in backup_lines:
                     f.write(line)
