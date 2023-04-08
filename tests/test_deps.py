@@ -107,5 +107,22 @@ class TestImportCleaner(unittest.TestCase):
             content = f.read()
         self.assertEqual(content, "from pytorch3d.renderer import look_at_view_transform\nlook_at_view_transform()\nprint('Hello World')\n")
 
+    def test_the_word_in(self):
+        with open(self.file_location, "w") as f:
+            f.write(
+                "from organisms.animals import invertebrates\n"
+                "if 1 in [1, 2, 3]:\n"
+                "    print('Hello World')\n"
+            )
+        dead_imports = [
+            "organisms"
+        ]
+        python_file = dependency_cleanup.PythonFile(self.file_location)
+        python_file.introspect()
+        python_file.remove_unused_imports(dead_imports)
+        with open(self.file_location, "r") as f:
+            content = f.read()
+
+        self.assertEqual(content, "if 1 in [1, 2, 3]:\n    print('Hello World')\n")
 if __name__ == "__main__":
     unittest.main()

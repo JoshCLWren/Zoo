@@ -590,9 +590,10 @@ class PythonFile:
                     new_import_statement = f"{new_import_statement})\n"
                 else:
                     new_import_statement = f"{new_import_statement}\n"
-                new_lines_copy.insert(0, new_import_statement)
-                new_lines = new_lines_copy
-
+                # check the last word of the import statement if its "in" or "as" then remove it then do not add a new line
+                if new_import_statement.split(" ")[-1] not in ["in", "as"]:
+                    new_lines_copy.insert(0, new_import_statement)
+                    new_lines = new_lines_copy
         file_changes = "".join(lines) != "".join(new_lines)
         try:
             with open(self.file_location, "w") as f:
