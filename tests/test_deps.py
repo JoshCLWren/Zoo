@@ -155,6 +155,28 @@ class TestImportCleaner(unittest.TestCase):
             "print('Hello World')\n",
         )
 
+    def test_requests(self):
+        """
+        Test that the requests library is not removed from the imports
+        :return:
+        """
+        test_string = "import requests\n"
+        test_get = "requests.get('https://www.google.com')\n"
+        test_print = "print('Hello World')\n"
+        with open(self.file_location, "w") as f:
+            f.write(
+                test_string
+                + test_get
+                + test_print
+            )
+        dead_imports = []
+        python_file = dependency_cleanup.PythonFile(self.file_location)
+        python_file.introspect()
+        python_file.remove_unused_imports(dead_imports)
+        with open(self.file_location, "r") as f:
+            content = f.read()
+
+        self.assertEqual(content, test_string + test_get + test_print)
 
 
 if __name__ == "__main__":

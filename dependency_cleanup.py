@@ -85,7 +85,8 @@ def main(args, file=None):
     project.get_python_files()
     project.get_imports()
     project.filter_imports(requirements)
-    assert "PyDictionary" not in project.final_dead_imports
+    assert "statsmodel" not in project.final_dead_imports
+    breakpoint()
     project.remove_dead_imports()
     project.validate_requirements(requirements)
     requirements.remove_unused_requirements(args)
@@ -117,6 +118,7 @@ class Requirements:
         "tomlkit",
         "pytest",
         "argparse",
+        "ast"
     )
     txt_requirements = []
     requirements_installed = []
@@ -324,11 +326,41 @@ class Project:
         custom_print(f"Found {len(self.dead_imports)} unused imports in all files")
 
     def filter_imports(self, requirements_instance):
-        assert "PyDictionary" not in self.final_dead_imports
-        self.import_blocks = [
-            import_block.split(".")[0] for import_block in self.import_blocks
-        ]
+        live_modules, live_sub_modules = [], []
+        for block in self.import_blocks:
+            if "." in block:
+                split_mod = block.split(".")
+                live_modules.append(split_mod[0])
+                live_sub_modules.append(split_mod[1])
+        self.import_blocks.extend(live_modules)
+        self.import_blocks.extend(live_sub_modules)
+        self.import_blocks = list(set(self.import_blocks))
         self.skipped_libraries = stdlib_check.Builtins().get(self.import_blocks)
+        # filter out any imports that may be importing a project file or module
+        project_files = []
+        project_folders = []
+        for file in self.python_files:
+            # remove the project path from the file location
+            file_location = file.file_location.replace(self.PROJECT_PATH, "")
+            # split to see if it is a top level file or a module
+            split_file_location = file_location.split(os.sep)
+            if len(split_file_location) == 1:
+                # top level file
+                project_files.append(split_file_location[0].replace(".py", ""))
+            else:
+                # module
+                # remove the file name from the file location
+                project_files.append(split_file_location[-1].replace(".py", ""))
+                # add all remaining folders to the project folders list
+                project_folders.extend(split_file_location[:-1])
+        project_files = list(set(project_files))
+        project_folders = list(set(project_folders))
+        self.projects_modules.extend(project_files)
+        self.projects_modules.extend(project_folders)
+        self.skipped_libraries = list(self.skipped_libraries)
+        self.skipped_libraries.extend(self.projects_modules)
+        self.skipped_libraries = list(set(self.skipped_libraries))
+
 
         custom_print(f"Found {len(self.skipped_libraries)} python standard libraries")
         self.possible_project_level_libraries = [
@@ -339,33 +371,51 @@ class Project:
         )
         self.skipped_libraries = list(set(self.skipped_libraries))
         self.skipped_libraries.extend(list(self.possible_project_level_libraries))
+        dead_modules, dead_sub_modules = [], []
+        for block in self.dead_imports:
+            if "." in block:
+                split_mod = block.split(".")
+                dead_modules.append(split_mod[0])
+                dead_sub_modules.append(split_mod[1])
+        self.dead_imports.extend(dead_modules)
+        self.dead_imports.extend(dead_sub_modules)
+        self.dead_imports = list(set(self.dead_imports))
+
+        fine_filter = []
+        for final_import in self.import_blocks:
+            tokens = final_import.split(".")
+            for token in tokens:
+                if token in fine_filter:
+                    continue
+                if token in self.skipped_libraries:
+                    reason = ""
+                    if token in self.possible_project_level_libraries:
+                        reason = "Possible project level library"
+                    elif token in self.projects_modules:
+                        reason = "Project module"
+                    else:
+                        reason = "Python standard library"
+                    custom_print(f"Removing {final_import} from import blocks because it is a {reason}")
+                    fine_filter.append(token)
+
+        for import_block in fine_filter:
+            if import_block in self.import_blocks:
+                self.import_blocks.remove(import_block)
+        self.import_blocks = list(set(self.import_blocks))
         self.final_import_blocks = [
             import_block
             for import_block in self.import_blocks
-            if import_block not in self.skipped_libraries
+            if import_block not in self.skipped_libraries and import_block not in self.dead_imports
         ]
         custom_print(
             f"After removing python standard libraries and project imports, {len(self.final_import_blocks)} imports remain"
         )
-        assert "PyDictionary" not in self.final_dead_imports
-        # check dead_imports for any imports that are possible_project_level_libraries
-        for import_block in self.dead_imports:
-            import_line = None
-            if " " in import_block:
-                import_line = f"from {import_block.split(' ')[1]} import {import_block.split(' ')[0]}"
-            else:
-                import_line = f"import {import_block}"
+        # don't add python standard libraries to the requirements.txt file or the dead imports list
 
-            if (
-                " " in import_block
-                and import_block.split(" ")[1]
-                not in self.possible_project_level_libraries
-            ):
-                if import_line not in self.final_dead_imports:
-                    self.final_dead_imports.append(import_line)
-            if import_block not in self.possible_project_level_libraries:
-                if import_line not in self.final_dead_imports:
-                    self.final_dead_imports.append(import_line)
+        for import_block in self.dead_imports:
+            if import_block not in self.final_import_blocks and import_block in self.skipped_libraries:
+                self.final_dead_imports.append(import_block)
+
             else:
                 custom_print(
                     f"Removing {import_block} from dead imports as it appears to be a project level import"
