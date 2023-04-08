@@ -341,14 +341,20 @@ class Project:
         assert "PyDictionary" not in self.final_dead_imports
         # check dead_imports for any imports that are possible_project_level_libraries
         for import_block in self.dead_imports:
+            import_line = None
+            if " " in import_block:
+                import_line = f"from {import_block.split(' ')[1]} import {import_block.split(' ')[0]}"
+            else:
+                import_line = f"import {import_block}"
+
             if (
                     " " in import_block
                     and import_block.split(" ")[1]
                     not in self.possible_project_level_libraries
             ):
-                self.final_dead_imports.append(import_block)
+                self.final_dead_imports.append(import_line)
             if import_block not in self.possible_project_level_libraries:
-                self.final_dead_imports.append(import_block)
+                self.final_dead_imports.append(import_line)
             else:
                 custom_print(
                     f"Removing {import_block} from dead imports as it appears to be a project level import"
