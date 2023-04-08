@@ -10,6 +10,17 @@ def remove_leading_underscore(module):
     return [m[1:] if m.startswith("_") else m for m in module]
 
 
+def filter_out_site_packages(packages: list = None):
+    """
+    Filter out any modules that are in the site-packages directory of the python installation.
+    :return:
+    """
+    site_packages = Path(sysconfig.get_path("purelib"))
+    return [
+        module for module in packages if not (site_packages / module).exists()
+    ]
+
+
 class Builtins:
     """
     A class for checking if a module is a builtin module.
@@ -34,6 +45,7 @@ class Builtins:
             if output:
                 return output
         output = remove_leading_underscore(set(sys.builtin_module_names))
+        output = filter_out_site_packages(output)
         return self.cache_output(output, name)
 
     def cache_output(self, obj, name):
@@ -68,6 +80,7 @@ class Builtins:
                     c_modules.add(module_name)
 
         output = remove_leading_underscore(c_modules)
+        output = filter_out_site_packages(output)
         return self.cache_output(output, name)
 
     def stdlib_modules(self):
@@ -83,6 +96,7 @@ class Builtins:
             module_name = module_path.relative_to(stdlib_path).stem
             stdlib_modules.add(module_name)
         output = remove_leading_underscore(stdlib_modules)
+        output = filter_out_site_packages(output)
         return self.cache_output(output, name)
 
     def python_system_files(self):
@@ -106,6 +120,7 @@ class Builtins:
                     python_system_files.append(file.name)
 
         output = remove_leading_underscore(set(python_system_files))
+        output = filter_out_site_packages(output)
         return self.cache_output(output, name)
 
     def combine(self):

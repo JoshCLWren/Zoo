@@ -2,6 +2,7 @@ aiohttp
 aiosignal
 argparse
 arrow
+ast
 astroid
 async-timeout
 attrs
