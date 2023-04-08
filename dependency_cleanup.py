@@ -522,12 +522,17 @@ class PythonFile:
         try:
             with open(self.file_location, "w") as f:
                 multiline_import = False
+                new_multiline_import = []
                 for line in lines:
                     if multiline_import:
                         if ")" in line:
                             multiline_import = False
-                        if not is_dead_import(line):
-                            f.write(f"{line}\n")
+                            new_multiline_import.append(line)
+                            if len(new_multiline_import) > 1:
+                                for new_line in new_multiline_import:
+                                    f.write(f"{new_line}\n")
+                        elif not is_dead_import(line):
+                            new_multiline_import.append(line)
                     elif not is_dead_import(line):
                         f.write(f"{line}\n")
                     else:
@@ -535,6 +540,7 @@ class PythonFile:
 
                     if "(" in line and "import" in line:
                         multiline_import = True
+                        new_multiline_import = [line]
         except Exception as e:
             custom_print(f"Failed to remove unused imports from {self.file_location}: {e}")
             with open(self.file_location, "w") as f:
