@@ -1,6 +1,7 @@
 import unittest
-
+import argparse
 import dependency_cleanup
+import os
 
 
 class TestImportCleaner(unittest.TestCase):
@@ -178,6 +179,50 @@ class TestImportCleaner(unittest.TestCase):
 
         self.assertEqual(content, test_string + test_get + test_print)
 
+        # two remaining tests are needed. import panddas as pd and pd.DataFrame() exists is not working
+        # submodules of project level imports are not being removed i.e; from assets import GamesAssets
+
+    def test_aliases(self):
+        """
+        Test that when an import has an alias and then is used as the alias, it is not removed
+        :return:
+        """
+
+        test_string_import_alias = "import pandas as pd\n"
+        test_non_used_import = "import numpy as np\n"
+        test_string_alias = "pd.DataFrame()\n"
+        test_print = "print('Hello World')\n"
+        with open(self.file_location, "w") as f:
+            f.write(
+                test_string_import_alias
+                + test_non_used_import
+                + test_string_alias
+                + test_print
+            )
+        args = argparse.Namespace()
+        args.silent = False
+
+        dependency_cleanup.install_pip(args)
+        requirements = dependency_cleanup.Requirements(default=True)
+        requirements.check_env_packages(args)
+        requirements.uninstall_non_default_packages(args)
+        requirements.install(args, scan_project=True)
+        project_path = os.path.dirname(self.file_location)
+        project = dependency_cleanup.Project(project_path=project_path, file=self.file_location)
+        requirements.remove_unused_requirements(args)
+        project.get_python_files()
+        project.get_imports()
+        project.filter_imports(requirements)
+        assert project.dead_imports == ['numpy']
+        assert project.python_files[0].dead_imports == ["numpy"]
+        assert project.final_dead_imports == ['numpy']
+        assert project.final_import_blocks == ["pandas"]
+        project.remove_dead_imports()
+        project.validate_requirements(requirements)
+        with open(self.file_location, "r") as f:
+            content = f.read()
+
+        self.assertEqual(content, test_string_import_alias + test_string_alias + test_print)
 
 if __name__ == "__main__":
     unittest.main()

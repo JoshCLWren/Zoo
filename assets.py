@@ -5,12 +5,9 @@ import io
 import os
 from pathlib import Path
 
-import cairosvg
 import emoji
-import qrcode
 import requests
 from bs4 import BeautifulSoup
-from PIL import Image, ImageDraw, ImageFont
 from PyDictionary import PyDictionary
 
 

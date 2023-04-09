@@ -2,9 +2,11 @@
 This script scans each python file in the project and checks for unused imports. It then removes them.
 """
 
+
 import argparse
 import ast
 import builtins
+import contextlib
 import logging
 import os
 import re
@@ -319,8 +321,9 @@ class Project:
             self.python_files = []
         custom_print("Ignoring files: ", self.IGNORE_FILES)
         # add .gitignore to ignore files
-        with open(os.path.join(self.PROJECT_PATH, ".gitignore")) as f:
-            self.IGNORE_FILES.extend(f.read().splitlines())
+        with contextlib.suppress(FileNotFoundError):
+            with open(os.path.join(self.PROJECT_PATH, ".gitignore")) as f:
+                self.IGNORE_FILES.extend(f.read().splitlines())
         custom_print("Ignoring files: ", self.IGNORE_FILES)
         # List of directories to ignore
         self.IGNORE_DIRS = [".git", "venv", "images", ".idea"]
@@ -374,26 +377,17 @@ class Project:
         :return:
         """
 
-        assert "requests" not in self.final_dead_imports
-
         # find any imports that are not external packages requiring installation by pip
         # breakpoint()
         self.skipped_libraries = stdlib_check.Builtins().get()
-        breakpoint()
-        assert "keras" not in self.skipped_libraries
-        assert "dataclasses" in self.skipped_libraries
         self.import_blocks = self.filter_unique_tokens(self.import_blocks)
-        assert "requests" in self.skipped_libraries
         # filter out any imports that may be importing a project file or module
         self.projects_modules = self.inspect_project_level_imports()
         # add the project level imports to the skipped libraries list so they are not attempted to be installed
         self.skipped_libraries.extend(self.projects_modules)
         self.skipped_libraries = self.dedupe_list(self.skipped_libraries)
         # inspect the dead imports to see if they are project level imports
-        if self.dead_imports:
-            assert "keras" in self.dead_imports
         self.dead_imports = self.filter_unique_tokens(self.dead_imports)
-        assert "keras" in self.dead_imports
         # inspect the import blocks to see if they are project level imports as well
         self.import_blocks = self.filter_unique_tokens(self.import_blocks)
 
@@ -415,8 +409,6 @@ class Project:
             if import_block not in self.skipped_libraries
         ]
         self.final_dead_imports = self.dedupe_list(self.final_dead_imports)
-        assert "requests" not in self.final_dead_imports
-        assert "keras" in self.final_dead_imports
 
     def inspect_project_level_imports(self):
         """
@@ -462,10 +454,8 @@ class Project:
         :param import_blocks: list of import blocks
         :return: list of import blocks without any skipped libraries
         """
-
         live_modules, live_sub_modules = [], []
         for block in import_blocks:
-
             if "." in block:
                 split_mod = block.split(".")
                 if split_mod[0] in self.skipped_libraries:
@@ -477,7 +467,8 @@ class Project:
         import_blocks.extend(live_modules)
         import_blocks.extend(live_sub_modules)
         unique_blocks = self.dedupe_list(import_blocks)
-        return [block for block in unique_blocks if block not in self.skipped_libraries]
+        blocks = [block for block in unique_blocks if block not in self.skipped_libraries]
+        return blocks
 
     def remove_dead_imports(self):
         """
@@ -599,13 +590,18 @@ class PythonFile:
 
         imported_names = set()
         imported_full_names = {}
-
+        aliases = []
         for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 for alias in node.names:
                     imported_name = None
+                    import_alias = None
                     if isinstance(node, ast.Import):
                         imported_name = alias.name
+                        # chaeck if the alias has an asname and add it to the import_names set
+                        with contextlib.suppress(Exception):
+                            import_alias = alias.asname
+                            aliases.append({"name": alias.name, "asname": alias.asname})
                     elif isinstance(node, ast.ImportFrom):
                         imported_name = (
                             alias.name
@@ -615,6 +611,8 @@ class PythonFile:
                     if imported_name is not None:
                         self.imports.append(imported_name)
                         imported_names.add(alias.name)
+                        if import_alias is not None:
+                            imported_names.add(import_alias)
                         imported_full_names[alias.name] = imported_name
 
         class UsageVisitor(ast.NodeVisitor):
@@ -629,11 +627,34 @@ class PythonFile:
         visitor = UsageVisitor(imported_names)
         visitor.visit(tree)
 
-        self.valid_imports = [imported_full_names[name] for name in visitor.used_names]
+        for name in visitor.used_names:
+            if name in [package["asname"] for package in aliases]:
+                # find the name in aliases that the asname corresponds to
+                for alias in aliases:
+                    if alias["asname"] == name:
+                        self.valid_imports.append(alias["name"])
+            try:
+                self.valid_imports.append(imported_full_names[name])
+            except KeyError:
+                self.valid_imports.append(name)
 
         for import_ in self.imports:
             if import_ not in self.valid_imports:
                 self.dead_imports.append(import_)
+        dead_imports = self.dead_imports.copy()
+        final_dead_imports = []
+
+        for dead_import in dead_imports:
+            for alias in aliases:
+                if dead_import == alias["name"]:
+                    # check if the alias["asname"] is in the valid imports
+                    if alias["asname"] not in self.valid_imports:
+                        final_dead_imports.append(dead_import)
+                if dead_import == alias["asname"]:
+                    # ensure that the alias["name"] is not in the valid imports
+                    if alias["name"] not in self.valid_imports:
+                        final_dead_imports.append(dead_import)
+        self.dead_imports = final_dead_imports
 
         self.valid_imports = list(set(self.valid_imports))
         self.dead_imports = list(set(self.dead_imports))

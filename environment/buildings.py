@@ -12,15 +12,12 @@ import uuid
 from dataclasses import dataclass, field
 
 import arrow
-import pandas as pd
 
 import database
 import environment.grid
 from environment.base_elements import Dirt
 from environment.grid import Tile, create_tiles_table
 from environment.liquids import Water
-from organisms.animals import (Animal, Elephant, Giraffe, Hyena, Lion, Rhino,
-                               Zebra)
 from organisms.dead_things import Corpse
 from organisms.plants import Bush, Grass, Tree
 

@@ -6,6 +6,7 @@ The player can also interact with other animals, and the player can also interac
 environment. The player can be a carnivore, herbivore, or omnivore, and the player can be a
 predator or prey since it's random what animal the player is.
 """
+from organisms.animals import Animal
 
 import logging
 import sqlite3
@@ -17,8 +18,6 @@ from environment.base_elements import Dirt
 from environment.buildings import Zoo, create_zoo
 from environment.grid import Tile
 from environment.liquids import Water
-from organisms.animals import (Animal, Elephant, Giraffe, Hyena, Lion, Rhino,
-                               Zebra)
 from organisms.organisms import LifeException
 from organisms.plants import Bush, Grass, Plant, Tree
 

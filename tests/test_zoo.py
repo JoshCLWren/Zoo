@@ -1,13 +1,12 @@
 """
 Test for the zoo module.
 """
+from environment.buildings import zoo
 from random import randint
 
 import pytest
 
 import database
-from environment.buildings import (create_zoo, create_zoo_table,
-                                   zoo_schema_as_dict)
 from environment.grid import Tile
 from organisms.animals import Elephant
 from organisms.plants import Bush
