@@ -6,7 +6,7 @@ The player can also interact with other animals, and the player can also interac
 environment. The player can be a carnivore, herbivore, or omnivore, and the player can be a
 predator or prey since it's random what animal the player is.
 """
-from organisms.animals import Animal
+from organisms.animals import Animal, Elephant, Giraffe, Hyena, Lion, Rhino, Zebra
 
 import logging
 import sqlite3

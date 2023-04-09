@@ -4,7 +4,6 @@ Tests for the behaviour of animal objects.
 
 
 import itertools
-import unittest.mock
 
 import pytest
 

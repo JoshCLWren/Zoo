@@ -2,7 +2,7 @@
 This script scans each python file in the project and checks for unused imports. It then removes them.
 """
 
-
+import json
 import argparse
 import ast
 import builtins
@@ -89,12 +89,12 @@ def main(args, file=None):
     project.get_python_files()
     project.get_imports()
     project.filter_imports(requirements)
-    assert "statsmodel" not in project.final_dead_imports
     project.remove_dead_imports()
-    project.validate_requirements(requirements)
+    valid_requirements = project.validate_requirements(requirements)
     requirements.remove_unused_requirements(args)
-    requirements.install(args, scan_project=False)
-
+    requirements.install(args, scan_project=False, dead_imports=project.final_dead_imports, valid_requirements=valid_requirements)
+    requirements.check_env_packages(args, dead_imports=project.final_dead_imports)
+    requirements.master_txt_file_gen(valid_requirements=valid_requirements, dead_imports=project.final_dead_imports)
 
 class Requirements:
     """
@@ -182,7 +182,7 @@ class Requirements:
             os.system(cmd)
 
 
-    def install(self, args, scan_project=False):
+    def install(self, args, scan_project=False, dead_imports=False, valid_requirements=False):
         """
         Install the base requirements for this project and compile a list of requirements.txt
         :return:
@@ -192,8 +192,10 @@ class Requirements:
         if self.packages_to_install:
             custom_print("Installing base requirements...")
             # create a temporary requirements file
-            self.install_missing(args)
+            self.install_missing(args, valid_requirements=valid_requirements, dead_imports=dead_imports)
         self.create_requirements_file(scan_project=scan_project)
+        self.install_missing(args, dead_imports=dead_imports, valid_requirements=valid_requirements)
+
 
     def create_requirements_file(
         self, create_master_requirements=True, scan_project=True
@@ -226,9 +228,9 @@ class Requirements:
                         f.write(line)
 
         if create_master_requirements:
-            self._master_txt_file_gen()
+            self.master_txt_file_gen()
 
-    def _master_txt_file_gen(self):
+    def master_txt_file_gen(self, dead_imports=False, valid_requirements=False):
         # create a master requirements file
         if os.path.exists("requirements.txt"):
             os.remove("requirements.txt")
@@ -238,14 +240,27 @@ class Requirements:
             self.requirements_installed = list(self.requirements_installed)
         # combine the base requirements with the requirements installed in the environment and write to file
         # with no duplicates
-        requirements_set = set(self.base_requirements + self.requirements_installed)
+        requirements_set = []
+        requirements_set.extend(self.base_requirements)
+        requirements_set.extend(self.requirements_installed)
+        requirements_set.extend(self.packages_to_install)
         # alphabetize the requirements regardless of case
+        requirements_set = set(requirements_set)
         requirements_set = sorted(requirements_set, key=lambda s: s.lower())
+        triple_checked_requirements = []
+        for package in requirements_set:
+            if dead_imports and package in dead_imports:
+                continue
+            if valid_requirements and package in valid_requirements:
+                triple_checked_requirements.append(package)
+            if not valid_requirements:
+                triple_checked_requirements.append(package)
+        requirements_set = triple_checked_requirements
         with open("requirements.txt", "w") as f:
             for package in requirements_set:
                 f.write(f"{package}\r")
 
-    def install_missing(self, args):
+    def install_missing(self, args, dead_imports=False, valid_requirements=False):
         """
         Install the missing packages.
         Creates a temporary requirements file and installs the packages from it.
@@ -256,7 +271,12 @@ class Requirements:
         )
         with open(self.temp_requirements_file, "w") as f:
             for package in self.packages_to_install:
-                f.write(f"{package}\r")
+                if dead_imports and package in dead_imports:
+                    continue
+                if valid_requirements and package in valid_requirements:
+                    f.write(f"{package}\r")
+                if not valid_requirements:
+                    f.write(f"{package}\r")
         cmd = f"{sys.executable} -m pip install -r {self.temp_requirements_file}"
 
         if args.silent:
@@ -265,14 +285,14 @@ class Requirements:
         os.remove(self.temp_requirements_file)
         custom_print("Base requirements installed successfully.")
 
-    def check_env_packages(self, args):
+    def check_env_packages(self, args, dead_imports=False, project_level_imports=False):
         cmd = [sys.executable, "-m", "pip", "freeze"]
         if args.silent:
             cmd.append("-q")
         env_packages = subprocess.check_output(cmd)
         env_packages = env_packages.decode("utf-8").splitlines()
 
-        packages_to_install = []
+        packages_to_install = self.packages_to_install or []
         # compare this to the requirements.txt file, remove any environment packages that are not in the
         # requirements.txt
         requiments_files_packages = []
@@ -283,11 +303,15 @@ class Requirements:
                     and line.strip() not in self.base_requirements
                     and line.strip() not in requiments_files_packages
                 ):
+                    if "BeautifulSoup" in line.strip():
+                        # this is a special case, the package name is different than the import name
+                        continue
+                    if dead_imports and line.strip() in dead_imports:
+                        continue
+                    if project_level_imports and line.strip() in project_level_imports:
+                        continue
                     self.packages_to_remove.append(line.strip())
                 requiments_files_packages.append(line.strip())
-        if self.packages_to_remove:
-            # breakpoint()
-            pass
         for package in env_packages:
             if package in requiments_files_packages:
                 packages_to_install.append(package)
@@ -297,7 +321,6 @@ class Requirements:
                     self.txt_requirements.append(package)
                     packages_to_install.append(package)
         if packages_to_install:
-            assert "keras" not in packages_to_install
             self.packages_to_install = packages_to_install
 
 
@@ -357,13 +380,18 @@ class Project:
 
     def get_imports(self):
         # scan each python file for import statements and add them to a list
+        used_imports = []
         for file in self.python_files:
             custom_print(f"Scanning {file} for imports")
             file.introspect()
             custom_print(f"Found {len(file.imports)} imports in {file.file_location}")
             self.import_blocks.extend(file.imports)
             self.dead_imports.extend(file.dead_imports)
-
+            used_imports.extend(file.valid_imports)
+        # remove used_imports from dead_imports
+        self.dead_imports = list(set(self.dead_imports) - set(used_imports))
+        self.import_blocks.extend(used_imports)
+        assert "requests" in self.import_blocks
         # remove duplicates
         self.import_blocks = list(set(self.import_blocks))
         custom_print(f"Found {len(self.import_blocks)} used imports in all files")
@@ -376,9 +404,8 @@ class Project:
         :param requirements_instance:
         :return:
         """
-
         # find any imports that are not external packages requiring installation by pip
-        # breakpoint()
+        assert "requests" in self.import_blocks
         self.skipped_libraries = stdlib_check.Builtins().get()
         self.import_blocks = self.filter_unique_tokens(self.import_blocks)
         # filter out any imports that may be importing a project file or module
@@ -409,6 +436,8 @@ class Project:
             if import_block not in self.skipped_libraries
         ]
         self.final_dead_imports = self.dedupe_list(self.final_dead_imports)
+        assert "requests" in self.final_import_blocks
+        requirements_instance.packages_to_install.extend(self.final_import_blocks)
 
     def inspect_project_level_imports(self):
         """
@@ -456,6 +485,8 @@ class Project:
         """
         live_modules, live_sub_modules = [], []
         for block in import_blocks:
+            if block == "requests":
+                pass
             if "." in block:
                 split_mod = block.split(".")
                 if split_mod[0] in self.skipped_libraries:
@@ -480,8 +511,35 @@ class Project:
             file.remove_unused_imports(self.final_dead_imports)
 
     def validate_requirements(self, requirements_instance):
+
+        # check if the validated requirement cache exists
+        invalid_requirements = []
+        validated_cache_file = "validated_requirements.json"
+        invalid_requirements_file = "invalid_requirements.json"
+        if os.path.exists(validated_cache_file):
+            with open(validated_cache_file, "r") as file:
+                try:
+                    validated_requirements = json.load(file)
+                except json.decoder.JSONDecodeError:
+                    validated_requirements = []
+        else:
+            validated_requirements = []
+        if "BeautifulSoup" in validated_requirements: # Some packages are named differently on PyPI than they are on GitHub
+            new_requirements = [requirement for requirement in validated_requirements if requirement != "BeautifulSoup"]
+            validated_requirements = new_requirements
+            invalid_requirements.append("BeautifulSoup")
+        # check if the invalid requirements cache exists
+        if os.path.exists(invalid_requirements_file):
+            with open(invalid_requirements_file, "r") as file:
+                with contextlib.suppress(json.decoder.JSONDecodeError):
+                    invalid_requirements = json.load(file)
         self.final_import_blocks = list(set(self.final_import_blocks))
         for import_block in self.final_import_blocks:
+            # check if the import block is cached in either the validated or invalid requirements cache
+            if import_block in validated_requirements:
+                continue
+            if import_block in invalid_requirements:
+                continue
             if import_block in self.skipped_libraries:
                 print(f"Skipping {import_block} as it matches a skipped library")
                 continue
@@ -491,10 +549,12 @@ class Project:
                     import_block_suffix = import_block.split(".")[1]
                     if import_block_prefix in self.skipped_libraries:
                         print(f"Skipping {import_block} as it's prefix matches a skipped library")
+                        invalid_requirements.append(import_block)
                         continue
 
                     if import_block_suffix in self.skipped_libraries:
                         print(f"Skipping {import_block} as it's suffix matches a skipped library")
+                        invalid_requirements.append(import_block)
                         continue
                     for block in self.skipped_libraries:
                         possible_skip_reason = ""
@@ -508,14 +568,35 @@ class Project:
                             )
                             if user_decision.lower() == "y":
                                 print(f"Skipping {import_block} as it matches a skipped library")
+                                invalid_requirements.append(import_block)
                                 continue
                     import_block = import_block_prefix
                 except Exception as e:
                     custom_print(f"Failed to remove . from {import_block}: {e}")
+                    invalid_requirements.append(import_block)
                     continue
-
-            if package := self.package_exists_on_pypi(import_block):
-                requirements_instance.packages_to_install.append(package)
+            if (
+                import_block not in self.skipped_libraries
+                or import_block not in invalid_requirements
+            ) and import_block not in validated_requirements:
+                if package := self.package_exists_on_pypi(import_block):
+                    requirements_instance.packages_to_install.append(package)
+                    validated_requirements.append(package)
+                else:
+                    invalid_requirements.append(import_block)
+        # cache the invalid requirements so we can use them later
+        with open(invalid_requirements_file, "w") as f:
+            invalid_requirements = list(set(invalid_requirements))
+            if "BeautifulSoup" not in invalid_requirements:
+                invalid_requirements.append("BeautifulSoup")
+            json.dump(invalid_requirements, f)
+        with open(validated_cache_file, "w") as f:
+            validated_requirements = list(set(validated_requirements))
+            if "BeautifulSoup" in validated_requirements:
+                new_requirements = [requirement for requirement in validated_requirements if requirement != "BeautifulSoup"]
+                validated_requirements = new_requirements
+            json.dump(validated_requirements, f)
+        return list(set(validated_requirements))
 
     def package_exists_on_pypi(self, package_name, retry_count=0):
         pypi_package_aliases = (

@@ -5,7 +5,6 @@ import io
 import os
 from pathlib import Path
 
-import emoji
 import requests
 from bs4 import BeautifulSoup
 from PyDictionary import PyDictionary

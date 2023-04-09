@@ -141,8 +141,8 @@ class Builtins:
             self.builtin_modules()
             + self.c_implemented_modules()
             + self.stdlib_modules()
-            + self.python_system_files()
-            + self.python_site_packages()
+            # + self.python_system_files()
+            # + self.python_site_packages()
         )
         self.modules = self.cache_output(output, name)
         return self.modules
@@ -160,38 +160,42 @@ class Builtins:
                 return self.cache_dict[obj]
         return None
 
-    def get(self, filtered_by=None):
+    def get(self):
         self.stdlib_modules()
-        self.python_system_files()
+        # self.python_system_files()
         self.c_implemented_modules()
         self.builtin_modules()
-        self.python_site_packages()
+        # self.python_site_packages()
         self.combine()
-        if filtered_by:
-            self.filter_by(filtered_by)
-        try:
-            assert "requests" in self.modules
-        except AssertionError:
-            print("requests not in modules")
+        # if filtered_by:
+        #     self.filter_by(filtered_by)
+        # try:
+        #     assert "requests" in self.modules
+        # except AssertionError:
+        #     print("requests not in modules")
 
         return list(self.modules)
 
-    def filter_by(self, obj):
-        self.modules = set([module for module in self.modules if module in obj])
+    # def filter_by(self, obj):
+    #     breakpoint()
+    #     filtered_list = []
+    #     for module in self.modules:
+    #         if module not in obj:
+    #             filtered_list.append(module)
+    #     self.modules = filtered_list
+    #     return self.modules
 
-        return self.modules
-
-    def python_site_packages(self):
-        """
-        Get a list of all the site packages.
-        :return: Path
-        """
-        packages = []
-        site_packages = Path(sysconfig.get_path("purelib"))
-        for file in site_packages.glob("**/*"):
-            if file.is_dir():
-                packages.append(file.name)
-            else:
-                packages.append(file.name[:-3])
-        assert "requests" in packages
-        return self.cache_output(packages, "site_packages")
+    # def python_site_packages(self):
+    #     """
+    #     Get a list of all the site packages.
+    #     :return: Path
+    #     """
+    #     packages = []
+    #     site_packages = Path(sysconfig.get_path("purelib"))
+    #     for file in site_packages.glob("**/*"):
+    #         if file.is_dir():
+    #             packages.append(file.name)
+    #         else:
+    #             packages.append(file.name[:-3])
+    #     assert "requests" in packages
+    #     return self.cache_output(packages, "site_packages")

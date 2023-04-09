@@ -1,18 +1,15 @@
 import contextlib
-import datetime
 import io
 import itertools
 import os
 import pickle
-import platform
 import random
 import sqlite3
 import time
 import uuid
 from dataclasses import dataclass, field
-
 import arrow
-
+import pandas as pd
 import database
 import environment.grid
 from environment.base_elements import Dirt
@@ -20,6 +17,7 @@ from environment.grid import Tile, create_tiles_table
 from environment.liquids import Water
 from organisms.dead_things import Corpse
 from organisms.plants import Bush, Grass, Tree
+import organisms
 
 
 def make_blank_grid(height, width):
@@ -155,7 +153,6 @@ class Zoo:
         grid = []
 
         # Clear the console screen
-        # os.system("cls" if platform.system().lower() == "windows" else "clear")
 
         for row in self.grid:
             row_emojis = []
@@ -386,7 +383,7 @@ class Zoo:
 
             # Check if the cell is an instance of an Animal
             if issubclass(
-                self.grid[tile.position[0]][tile.position[1]].__class__, Animal
+                self.grid[tile.position[0]][tile.position[1]].__class__, organisms.animals.Animal
             ):
                 # If it is, replace the tile with the animal
                 self.grid[tile.position[0]][tile.position[1]] = tile
