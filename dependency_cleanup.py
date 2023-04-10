@@ -382,21 +382,23 @@ class Project:
         # scan each python file for import statements and add them to a list
         used_imports = []
         for file in self.python_files:
-            custom_print(f"Scanning {file} for imports")
-            file.introspect()
-            custom_print(f"Found {len(file.imports)} imports in {file.file_location}")
-            self.import_blocks.extend(file.imports)
-            self.dead_imports.extend(file.dead_imports)
-            used_imports.extend(file.valid_imports)
+            self._file_import_scan(file, used_imports)
         # remove used_imports from dead_imports
         self.dead_imports = list(set(self.dead_imports) - set(used_imports))
         self.import_blocks.extend(used_imports)
-        assert "requests" in self.import_blocks
         # remove duplicates
         self.import_blocks = list(set(self.import_blocks))
         custom_print(f"Found {len(self.import_blocks)} used imports in all files")
         self.dead_imports = list(set(self.dead_imports))
         custom_print(f"Found {len(self.dead_imports)} unused imports in all files")
+
+    def _file_import_scan(self, file, used_imports):
+        custom_print(f"Scanning {file} for imports")
+        file.introspect()
+        custom_print(f"Found {len(file.imports)} imports in {file.file_location}")
+        self.import_blocks.extend(file.imports)
+        self.dead_imports.extend(file.dead_imports)
+        used_imports.extend(file.valid_imports)
 
     def filter_imports(self, requirements_instance):
         """
@@ -405,7 +407,6 @@ class Project:
         :return:
         """
         # find any imports that are not external packages requiring installation by pip
-        assert "requests" in self.import_blocks
         self.skipped_libraries = stdlib_check.Builtins().get()
         self.import_blocks = self.filter_unique_tokens(self.import_blocks)
         # filter out any imports that may be importing a project file or module
@@ -436,7 +437,6 @@ class Project:
             if import_block not in self.skipped_libraries
         ]
         self.final_dead_imports = self.dedupe_list(self.final_dead_imports)
-        assert "requests" in self.final_import_blocks
         requirements_instance.packages_to_install.extend(self.final_import_blocks)
 
     def inspect_project_level_imports(self):
@@ -485,8 +485,6 @@ class Project:
         """
         live_modules, live_sub_modules = [], []
         for block in import_blocks:
-            if block == "requests":
-                pass
             if "." in block:
                 split_mod = block.split(".")
                 if split_mod[0] in self.skipped_libraries:
@@ -498,15 +496,15 @@ class Project:
         import_blocks.extend(live_modules)
         import_blocks.extend(live_sub_modules)
         unique_blocks = self.dedupe_list(import_blocks)
-        blocks = [block for block in unique_blocks if block not in self.skipped_libraries]
-        return blocks
+        return [
+            block for block in unique_blocks if block not in self.skipped_libraries
+        ]
 
     def remove_dead_imports(self):
         """
         Remove any unused imports from python files by calling the remove_unused_imports method on each file
         :return:
         """
-        assert "requests" not in self.final_dead_imports
         for file in self.python_files:
             file.remove_unused_imports(self.final_dead_imports)
 
@@ -724,19 +722,28 @@ class PythonFile:
                 self.dead_imports.append(import_)
         dead_imports = self.dead_imports.copy()
         final_dead_imports = []
-
+        final_valid_imports = []
         for dead_import in dead_imports:
             for alias in aliases:
-                if dead_import == alias["name"]:
-                    # check if the alias["asname"] is in the valid imports
-                    if alias["asname"] not in self.valid_imports:
-                        final_dead_imports.append(dead_import)
-                if dead_import == alias["asname"]:
-                    # ensure that the alias["name"] is not in the valid imports
-                    if alias["name"] not in self.valid_imports:
-                        final_dead_imports.append(dead_import)
-        self.dead_imports = final_dead_imports
+                if (
+                    dead_import == alias["name"]
+                    and alias["asname"] not in self.valid_imports
+                ):
+                    final_dead_imports.append(dead_import)
+                if (
+                    dead_import == alias["asname"]
+                    and alias["name"] not in self.valid_imports
+                ):
+                    final_dead_imports.append(dead_import)
+        for valid_import in self.valid_imports:
+            for alias in aliases:
+                if valid_import == alias["name"] and alias["asname"] not in self.valid_imports:
+                    final_valid_imports.append(alias["asname"])
+                if valid_import == alias["asname"] and alias["name"] not in self.valid_imports:
+                    final_valid_imports.append(alias["name"])
 
+        self.dead_imports = final_dead_imports
+        self.valid_imports = final_valid_imports
         self.valid_imports = list(set(self.valid_imports))
         self.dead_imports = list(set(self.dead_imports))
 

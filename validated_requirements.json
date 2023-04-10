@@ -1,1 +1,1 @@
-["arrow", "pygame", "Faker", "beautifulsoup4", "pandas", "PyDictionary", "pytest", "openai", "pd", "requests", "faker"]
+["Faker", "pd", "pytest", "beautifulsoup4", "arrow", "openai", "pygame", "faker", "pandas", "PyDictionary", "requests"]
