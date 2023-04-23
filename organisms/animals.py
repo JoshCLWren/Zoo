@@ -221,7 +221,10 @@ class Animal(Organism):  # pylint: disable=too-many-public-methods
 
         if not isinstance(direction_type, list):
             # if the direction is not a list, convert it to a list
-            direction = list(direction)
+            try:
+                direction = list(direction)
+            except TypeError:
+                direction = direction.position
 
         if current_occupant:
             if isinstance(current_occupant, Tile):

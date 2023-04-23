@@ -70,59 +70,60 @@ def simulate():
         animals=[Elephant, Giraffe, Hyena, Lion, Rhino, Zebra],
         plants=[Bush, Grass, Tree],
     )
-
-    zoo.refresh_grid(visualise=False)
-    # print the zoo
-    turn = 1
-    zoo.elapsed_turns = 0
-    living_animals = 1
+    zoo = Zoo.load_instance(zoo.id)
+    flat_list = [element for sublist in zoo.grid for element in sublist]
+    living_animals = [item for item in flat_list if isinstance(item, Animal)]
+    living_animals = len(living_animals)
+    turn = 0
+    print(f"Starting with {living_animals} animals")
     while living_animals:
-        # render the zoo
-        simulate_with_pygame(zoo)
-        import pdb
 
-        pdb.set_trace()
-        # run the simulation
-        flat_list = [element for sublist in zoo.grid for element in sublist]
-        living_animals = [item for item in flat_list if isinstance(item, Animal)]
-        living_animals = len(living_animals)
-        if not living_animals:
-            break
+        zoo.refresh_grid(visualise=False)
+        # print the zoo
+        turn, living_animals = simulate_with_pygame(zoo, turn)
+        print(f"Turn {turn} with {living_animals} animals")
 
-        dead_things = []
-        for row in zoo.grid:
-            for thing in row:
-                if isinstance(thing, Tile):
-                    thing = thing.type
-                if not thing:
+
+
+def take_turn(turn, zoo):
+    zoo = Zoo.load_instance(zoo.id)
+    flat_list = [element for sublist in zoo.grid for element in sublist]
+    living_animals = [item for item in flat_list if isinstance(item, Animal)]
+    living_animals = len(living_animals)
+    if not living_animals:
+        return False
+
+    dead_things = []
+    for row in zoo.grid:
+        for thing in row:
+            if isinstance(thing, Tile):
+                thing = thing.type
+            if not thing:
+                continue
+            if isinstance(thing, (Water, Dirt)):
+                continue
+            try:
+                if thing in dead_things:
                     continue
-                if isinstance(thing, (Water, Dirt)):
-                    continue
-                try:
-                    if thing in dead_things:
-                        continue
-                    if not thing.is_alive:
-                        dead_things.append(thing)
-                        continue
-                    zoo = Zoo.load_instance(thing.home_id)
-                    simulate_with_pygame(zoo)
-                    action = thing.turn(turn_number=turn)
-                    if action == "died":
-                        dead_things.append(thing)
-                except LifeException:
+                if not thing.is_alive:
                     dead_things.append(thing)
-                    # remove the animal from the grid
-                    zoo.grid[thing.position[0]][thing.position[1]] = None
-        turn += 1
-        zoo.elapsed_turns += 1
+                    continue
+                zoo = Zoo.load_instance(thing.home_id)
+                action = thing.turn(turn_number=turn)
+                if action == "died":
+                    dead_things.append(thing)
+            except LifeException:
+                dead_things.append(thing)
+                # remove the animal from the grid
+                zoo.grid[thing.position[0]][thing.position[1]] = None
+    turn += 1
+    zoo.elapsed_turns += 1
 
-        zoo.check_full()
-        print(f"Turn {turn}")
-        simulate_with_pygame(zoo)
-        zoo = Zoo.load_instance(zoo.id)
-
-
-def simulate_with_pygame(zoo):
+    zoo.check_full()
+    print(f"Turn {turn}")
+    return zoo.refresh_grid(visualise=False)
+def simulate_with_pygame(zoo, turn=1, living_animals=1):
+    zoo.elapsed_turns = turn
     grid = zoo.refresh_grid(visualise=False)
 
     # Set up the display
@@ -134,46 +135,50 @@ def simulate_with_pygame(zoo):
     )
 
     pygame.display.set_caption("Zoo Simulation")
+    zoo = Zoo.load_instance(zoo.id)
+    take_turn(turn, zoo)
+    # Draw grid
+    for row in range(len(grid)):
+        for column in range(len(grid[0])):
+            cell_content = grid[row][column]
+            asset = "images/Dirt.png"
+            if cell_content == "🐘":
+                asset = "images/Elephant.png"
+            elif cell_content == "🦒":
+                asset = "images/Giraffe.png"
+            elif cell_content == "🦓":
+                asset = "images/Zebra.png"
+            elif cell_content == "🦏":
+                asset = "images/Rhino.png"
+            elif cell_content == "🦁":
+                asset = "images/Lion.png"
+            elif cell_content == "🌿":
+                asset = "images/Grass.png"
+            elif cell_content == "🌳":
+                asset = "images/Tree.png"
+            elif cell_content == "🌊":
+                asset = "images/Water.png"
+            elif cell_content == "🦡":
+                asset = "images/Hyena.png"
 
-    # Main pygame loop
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-
-        # Draw grid
-        for row in range(len(grid)):
-            for column in range(len(grid[0])):
-                color = WHITE
-                cell = grid[row][column]
-
-                # Set color based on the type of object
-                if isinstance(cell, Tile):
-                    cell = cell.type
-                if isinstance(cell, (Water, Dirt)):
-                    color = BLUE
-                elif isinstance(cell, Plant):
-                    color = GREEN
-                elif isinstance(cell, Animal):
-                    color = RED
-
-                pygame.draw.rect(
-                    screen,
-                    color,
-                    [
-                        (MARGIN + CELL_SIZE) * column + MARGIN,
-                        (MARGIN + CELL_SIZE) * row + MARGIN,
-                        CELL_SIZE,
-                        CELL_SIZE,
-                    ],
-                )
+            # draw the asset in the square of the grid
+            image = pygame.image.load(asset)
+            image = pygame.transform.scale(image, (CELL_SIZE, CELL_SIZE))
+            screen.blit(image, (MARGIN + (CELL_SIZE + MARGIN) * column, MARGIN + (CELL_SIZE + MARGIN) * row + 50))
 
         # Update the screen
         pygame.display.flip()
 
-    # Quit pygame
-    pygame.quit()
+        # take a turn
+        grid = take_turn(turn, zoo)
+        if not grid:
+            break
+        turn += 1
+        living_animals = len([item for item in grid if isinstance(item, Animal)])
+        return turn, living_animals
+
+
+
 
 
 # run the simulation
